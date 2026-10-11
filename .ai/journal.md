@@ -20,7 +20,7 @@
 - Эталонный урок написан вручную, не сгенерирован LLM — качество генерации проверим на пайплайне.
 
 ### Как проверить
-- `python3 -c "import json,jsonschema; jsonschema.Draft202012Validator(json.load(open('docs/lesson.schema.json'))).validate(json.load(open('docs/examples/lesson-what-is-the-internet.json')))"` — без вывода = OK.
+- Через execute_code/venv (в системном python3 нет jsonschema): `jsonschema.Draft202012Validator(json.load(open('docs/lesson.schema.json'))).validate(json.load(open('docs/examples/lesson-what-is-the-internet.json')))` — без исключения = OK (проверено, 0 ошибок).
 
 ---
 
