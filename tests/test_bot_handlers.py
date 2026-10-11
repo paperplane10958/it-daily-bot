@@ -1,4 +1,4 @@
-"""Тесты echo-бота: /start, /help и эхо любых сообщений."""
+"""Тесты echo-бота: /start, /help, эхо и конфигурация бота."""
 
 import pytest
 
@@ -63,7 +63,7 @@ async def test_help_lists_commands():
     msg = FakeMessage()
     await handle_help(msg)
     assert msg.sent
-    assert "/start" in msg.sent[0] and "/help" in msg.sent[0]
+    assert "/lesson" in msg.sent[0] and "/progress" in msg.sent[0]
 
 
 @pytest.mark.asyncio
@@ -78,3 +78,82 @@ async def test_echo_ignores_empty_message():
     msg = FakeMessage(None)
     await handle_echo(msg)
     assert msg.sent == []
+
+
+# --- конфигурация бота ---------------------------------------------------------
+
+
+def test_build_bot_uses_socks_session_when_proxy_set():
+    from src.bot.__main__ import build_bot
+    from aiogram.client.session.aiohttp import AiohttpSession
+
+    bot = build_bot("123:test", "socks5://localhost:1080")
+    assert isinstance(bot.session, AiohttpSession)
+
+
+def test_build_bot_plain_without_proxy():
+    from src.bot.__main__ import build_bot
+
+    bot = build_bot("123:test", None)
+    assert bot.session.proxy is None
+
+
+def test_build_bot_sets_html_parse_mode():
+    """Рендер урока шлёт HTML-теги — parse_mode='HTML' должен быть дефолтом бота."""
+    from src.bot.__main__ import build_bot
+
+    for proxy in ("socks5://localhost:1080", None):
+        bot = build_bot("123:test", proxy)
+        assert bot.default.parse_mode == "HTML", f"parse_mode не задан (proxy={proxy!r})"
+
+
+@pytest.mark.asyncio
+async def test_echo_escapes_html():
+    """Пользовательский текст уходит как есть — при HTML-режиме `<` сломает отправку."""
+    msg = FakeMessage("1<2 и a&b")
+    await handle_echo(msg)
+    assert msg.sent == ["1&lt;2 и a&amp;b"]
+
+
+def test_dispatcher_includes_router():
+    from src.bot.__main__ import build_dispatcher
+
+    dp = build_dispatcher("123:test")
+    assert "messages" in [r.name for r in dp.sub_routers], "роутер не подключён"
+
+
+def test_init_stores_wires_runtime(tmp_path):
+    from src.bot.__main__ import init_stores
+    from src.agent.store import LessonStore
+    from src.bot.progress import ProgressStore
+    from src.bot.reminders import ReminderStore
+    from src.bot.handlers import runtime
+
+    init_stores(tmp_path / "lessons.db")
+    try:
+        assert isinstance(runtime["lessons"], LessonStore)
+        assert isinstance(runtime["progress"], ProgressStore)
+        assert isinstance(runtime["reminders"], ReminderStore)
+    finally:
+        runtime["lessons"].close()
+        runtime["progress"].close()
+        runtime["reminders"].close()
+        runtime["lessons"] = None
+        runtime["progress"] = None
+        runtime["reminders"] = None
+
+
+def test_studied_today_uses_progress_dates(tmp_path):
+    """Изучавшие сегодня собираются из activity_dates всех пользователей."""
+    from src.bot.__main__ import studied_today_ids
+    from src.agent.store import LessonStore
+    from src.bot.progress import ProgressStore
+
+    db = tmp_path / "lessons.db"
+    LessonStore(db).close()
+    ps = ProgressStore(db)
+    ps.mark_completed(7, "l1", correct=4, total=4, xp=10)
+    ps.mark_completed(9, "l2", correct=4, total=4, xp=10)
+    ids = studied_today_ids(ps)
+    ps.close()
+    assert set(ids) == {7, 9}, "оба занимались сегодня"
