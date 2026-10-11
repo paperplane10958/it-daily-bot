@@ -6,10 +6,28 @@
 - Ежедневные короткие уроки (5–15 мин) с геймификацией: стрики, XP, уровни.
 - Контент на основе roadmap.sh (начинаем с Beginner roadmap: Internet, Linux, Git и т.д.).
 
-## Стек (план)
-- Python 3.11+, aiogram 3.x
-- SQLite (позже PostgreSQL при необходимости)
-- Деплой: TBD
+## Стек
+- Python 3.13, aiogram 3.x, SQLite
+- Зависимости: uv (`uv pip install -r requirements.txt`)
+
+## Запуск
+```bash
+cp .env.example .env   # вписать BOT_TOKEN от @BotFather
+uv venv .venv          # один раз
+uv pip install -r requirements.txt
+.venv/bin/python -m src.bot.__main__
+```
+
+## Тесты
+```bash
+.venv/bin/python -m pytest tests/ -q
+```
+
+## Структура
+- `src/bot/` — бот (обработчики, точка входа)
+- `src/lessons/` — уроки: валидатор (`validate_lesson`)
+- `docs/lesson.schema.json` — схема урока v1, `docs/lesson-schema.md` — дизайн
+- `tests/` — pytest (валидатор, обработчики бота)
 
 ## Workflow
 - Git: `main` — стабильная ветка, фичи — через `feat/...` ветки.
