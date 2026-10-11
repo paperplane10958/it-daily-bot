@@ -1,5 +1,33 @@
 # Журнал работы агентов
 
+## 2026-10-11 — parse_mode=HTML + геймификация (стрик, уровни, /cards)
+
+**Агент:** Hermes (GLM)
+**Задача:** по замечанию пользователя включить HTML-режим Telegram; затем геймификация (стрики, уровни, карточки терминов).
+
+### Сделано
+- **parse_mode=HTML (повод — замечание пользователя про Bot API):** `build_bot()` ставит `DefaultBotProperties(parse_mode='HTML')` (aiogram 3: параметр в каждом answer() — deprecated, дефолт через DefaultBotProperties). Следствие: весь исходящий текст обязан быть валидным HTML → `render.py` экранирует LLM-текст и конвертирует markdown в разрешённые теги (`**x**`→`<b>`, `` `x` ``→`<code>`, ```→`<pre>`, порядок escape→pre→b→code); explanation и эхо пользователя экранируются (иначе «1<2» = 400 can't parse entities). Проверено на всех 259 сообщениях реальных 26 уроков: 0 проблем, 159 bold + 44 инлайн-кода сконвертированы.
+- **Геймификация (TDD, 3 слайса):**
+  - `src/lessons/gamify.py` — `streak_from_dates` (цепочка дней до сегодня/вчера; пропущенный день гасит; дедуп, будущее игнор), `level_for_xp` = 1 + XP//100, `level_progress`.
+  - `src/bot/progress.py` — `activity_dates()` (дни из `updated_at`), `terms()` = JOIN progress↔lessons: key_terms пройденных уроков (term, definition, lesson_id, lesson_title).
+  - `handlers.py` — `/progress` теперь показывает XP, уровень (45/100 до следующего) и стрик 🔥; `/cards` — флеш-карточки: термин → «Показать определение» → «Дальше», состояние в callback_data (`c:<idx>:show|next`), термины перечитываются из базы на каждое нажатие (консистентно после новых уроков). Пустые карточки → подсказка пройти /lesson.
+- Smoke на реальной базе: 2 тестовых прохождения → 12 карточек, show/next работают; тестовые строки прогресса удалены из data/lessons.db.
+- 111 passed.
+
+### Изменённые файлы
+- `src/bot/__main__.py`, `src/bot/handlers.py`, `src/bot/progress.py`, `src/lessons/render.py`, `src/lessons/gamify.py`, `tests/test_gamify.py`, `tests/test_render.py`, `tests/test_lesson_handlers.py`, `tests/test_bot_handlers.py`, `tests/test_progress.py`, `.ai/*`
+
+### Не доделано / риски
+- Стрик считается по датам `updated_at` (UTC): урок, пройденный в 02:00 МСК, запишется предыдущим днём — для pet-проекта приемлемо, при переносе на VPS учесть таймзону.
+- SRS-повторения карточек (интервалы) — следующий кандидат; сейчас простой линейный просмотр.
+- Бот у пользователя ещё не перезапущен — /lesson, /progress, /cards появятся после рестарта.
+
+### Как проверить
+- `.venv/bin/python -m pytest tests/ -q` → 111 passed (проверено).
+- Перезапустить бота: `/progress` (XP/уровень/стрик), `/cards` после первого урока.
+
+---
+
 ## 2026-10-11 — Генерация всех 26 тем + выдача уроков в боте (/lesson, квиз, XP)
 
 **Агент:** Hermes (GLM)
