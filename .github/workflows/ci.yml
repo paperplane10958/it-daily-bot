@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install Python and dependencies
+        run: |
+          uv python install 3.13
+          uv venv
+          uv pip install -r requirements.txt
+
+      - name: Run tests
+        run: .venv/bin/python -m pytest tests/ -q
