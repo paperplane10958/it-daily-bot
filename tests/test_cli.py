@@ -23,6 +23,8 @@ def test_cmd_generate_assigns_canonical_id(tmp_path, monkeypatch):
     Регрессия: LLM каждый раз выдумывает новый id -> перезапуск generate
     плодил дубликаты уроков (дедуп-проверка CLI сравнивает по каноническому id).
     """
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")  # герметичность: не читать .env машины
+
     topics_dir = tmp_path / "roadmaps" / "backend-beginner"
     topics_dir.mkdir(parents=True)
     (topics_dir / "topics.json").write_text(
