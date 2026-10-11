@@ -1,5 +1,29 @@
 # Журнал работы агентов
 
+## 2026-10-11 — Платная модель haiku-5.5, фикс meta.model, первая генерация
+
+**Агент:** Hermes (GLM)
+**Задача:** перейти с openrouter/free на недорогую платную модель, перезапустить первую генерацию.
+
+### Сделано
+- **Модель:** `LLM_MODEL=anthropic/claude-haiku-5.5` в `.env`. Цены сняты с API OpenRouter 2026-10-11: ~$0.003/урок (≈$0.08 все 26 тем) при ~4k in / ~5k out токенов. Решение с альтернативами — в `.ai/decisions.md`.
+- **Найден баг пайплайна:** промпт велит LLM оставить `meta.model` пустым («заполнит пайплайн»), а `_stamp_meta()` вызывался ПОСЛЕ `validate_lesson()` — каждый урок браковался («meta.model: '' should be non-empty»). Free-роутер до валидации не доходил (прерывался на reasoning), поэтому баг проявился только на платной модели.
+- **Фикс (TDD):** `_stamp_meta` перенесён до валидации в `generate_lesson()`; тест `test_generate_lesson_stamps_meta_before_validation`; FakeClient получил атрибут `model`. 50 passed.
+- **Первая реальная генерация удалась:** 2 урока (JavaScript, Pick a Language) → `data/lessons.db`, оба `published`. Haiku: 25–35 с на урок (free-роутер — минуты). Второй урок прошёл валидацию со 2-й попытки (семантика квиза). Качество проверено вручную: чистый русский, бытовые аналогии (ресторан = фронт/бэк), квиз корректен.
+
+### Изменённые файлы
+- `src/agent/generator.py`, `tests/test_generator.py`, `.ai/decisions.md`, `.ai/context.md`, `.env` (не в git: `LLM_MODEL=anthropic/claude-haiku-5.5`)
+
+### Не доделано / риски
+- Осталось 24 темы backend-beginner: `generate --limit 24` (~15 мин).
+- Выдача уроков в боте (/lesson + прогресс пользователя) — следующий этап.
+
+### Как проверить
+- `.venv/bin/python -m pytest tests/ -q` → 50 passed.
+- `python3 -c "import sqlite3; print(sqlite3.connect('data/lessons.db').execute('SELECT id,status FROM lessons').fetchall())"` → 2 урока published.
+
+---
+
 ## 2026-10-11 — Реальная генерация: запуск бота, прокси, OpenRouter через httpx
 
 **Агент:** Hermes (GLM)

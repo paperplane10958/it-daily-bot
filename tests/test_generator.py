@@ -63,6 +63,7 @@ class FakeClient:
     def __init__(self, response: str):
         self.response = response
         self.calls: list[dict] = []
+        self.model = "fake-model"  # как у OpenRouterClient: генератор проставляет meta.model
 
     def complete(self, prompt: str, system: str = "", temperature: float = 0.7) -> str:
         self.calls.append({"prompt": prompt, "system": system, "temperature": temperature})
@@ -87,6 +88,19 @@ def test_generate_lesson_reports_validation_errors():
     lesson, meta = generate_lesson(client, topic="Git", roadmap_id="r", source_md="")
     assert meta["valid"] is False
     assert meta["errors"], "должен вернуть список ошибок валидации"
+
+
+def test_generate_lesson_stamps_meta_before_validation():
+    # LLM оставляет meta.model пустым (так велит промпт) — пайплайн обязан
+    # проставить meta до валидации, иначе урок отбраковывается зря
+    bad = json.loads(json.dumps(EXAMPLE))
+    bad["meta"]["model"] = ""
+    raw = json.dumps(bad, ensure_ascii=False)
+    client = FakeClient(raw)
+    client.model = "test/model"
+    lesson, meta = generate_lesson(client, topic="Git", roadmap_id="r", source_md="")
+    assert meta["valid"] is True, meta["errors"]
+    assert lesson["meta"]["model"] == "test/model"
 
 
 def test_generate_lesson_retries_on_invalid_then_passes():

@@ -128,10 +128,11 @@ def generate_lesson(
         except ValueError as e:
             errors = [str(e)]
             continue
-        # LLM не обязан заполнять meta — ставим сами
+        # LLM не обязан заполнять meta (промпт велит оставить model пустой) —
+        # проставляем ДО валидации, иначе пустая meta.model отбраковывает урок зря
+        _stamp_meta(lesson, model=getattr(client, "model", "unknown"))
         errors = validate_lesson(lesson)
         if not errors:
-            _stamp_meta(lesson, model=getattr(client, "model", "unknown"))
             return lesson, {"valid": True, "errors": [], "attempts": attempts}
         # ошибка валидации: ретраим с тем же промптом (LLM видит только его)
 
