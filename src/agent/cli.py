@@ -39,6 +39,16 @@ def slugify(label: str) -> str:
     return "".join(c.lower() if c.isalnum() else "-" for c in label).strip("-")
 
 
+def lesson_id(roadmap_id: str, label: str) -> str:
+    """Канонический id урока '<roadmap>-<slug>' — назначает пайплайн, не LLM.
+
+    Стабильный ключ дедупа: LLM каждый раз выдумывает свой slug, поэтому id
+    от LLM нельзя использовать для проверки «урок уже есть» (иначе перезапуск
+    generate плодит дубликаты).
+    """
+    return f"{roadmap_id}-{slugify(label)}"
+
+
 def fetch_topic_content(roadmap_id: str, topic: dict, timeout: int = 30) -> str:
     """Скачать markdown ноды темы из репо developer-roadmap (может не существовать)."""
     url = CONTENT_URL.format(roadmap_id=roadmap_id, slug=slugify(topic["label"]), node_id=topic["node_id"])
@@ -88,9 +98,9 @@ def cmd_generate(args) -> int:
     for t in topics:
         if budget <= 0:
             break
-        # пропускаем темы, по которым урок уже есть
-        existing_id = f"{args.roadmap}-{slugify(t['label'])}"
-        if store.get_lesson(existing_id):
+        # пропускаем темы, по которым урок уже есть (по каноническому id)
+        lid = lesson_id(args.roadmap, t["label"])
+        if store.get_lesson(lid):
             skipped += 1
             continue
 
@@ -101,6 +111,8 @@ def cmd_generate(args) -> int:
         )
 
         if meta["valid"]:
+            # канонический id назначаем сами — id от LLM нестабилен между запусками
+            lesson["id"] = lid
             lesson["roadmap"]["order"] = topics.index(t) + 1
             store.upsert_lesson(lesson)
             ok += 1
