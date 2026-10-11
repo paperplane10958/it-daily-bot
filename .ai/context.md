@@ -18,17 +18,18 @@
 - [x] Выдача уроков в боте: /lesson (контент + квиз-кнопки, XP), /progress, таблица progress в SQLite
 - [x] parse_mode=HTML по умолчанию + безопасный рендер LLM-текста (markdown -> теги, escape)
 - [x] Геймификация: стрик, уровни (100 XP), карточки терминов /cards (без SRS)
-- [ ] Пользователь проверяет бота вживую: /lesson, /progress, /cards в @it_daily_paperplane_bot (нужен перезапуск бота)
+- [x] Ежедневные напоминания: /remind (кнопки 7/12/19/22), фоновый тик раз в минуту, анти-спам (1/день), пропускает занимавшихся сегодня
+- [ ] Пользователь проверяет бота вживую: /lesson, /progress, /cards, /remind в @it_daily_paperplane_bot (нужен перезапуск бота)
 - [ ] SRS-повторения карточек (интервалы, приоритет забытых) — если /cards зайдёт
 
 ## Ключевые факты окружения
 - Сеть блокирует api.telegram.org напрямую → `BOT_PROXY=socks5://localhost:1080` (прокси из `~/.ssh/config`, DynamicForward 1080) в `.env`.
 - OpenRouter блокирует python-urllib по TLS-отпечатку (403) → клиент на httpx (прокси берёт из env `ALL_PROXY`).
-- `.env`: BOT_TOKEN, OPENROUTER_API_KEY заданы; `LLM_MODEL=anthropic/claude-haiku-5.5` (~$0.003/урок, ~30 с). Тесты: 111 passed.
+- `.env`: BOT_TOKEN, OPENROUTER_API_KEY заданы; `LLM_MODEL=anthropic/claude-haiku-5.5` (~$0.003/урок, ~30 с). Тесты: 129 passed.
 - Ветки: `main` (бот+валидатор+CI), `feat/content-agent` (контент-агент, актуальная работа).
 
 ## Следующий шаг
-Перезапустить бота и проверить вживую: `/lesson` (урок + квиз + XP), `/progress` (XP, уровень, стрик 🔥), `/cards` (карточки терминов). Дальше: деплой на VPS (systemd-сервис, .env, БД) или SRS-повторения карточек.
+Перезапустить бота и проверить вживую: `/lesson`, `/progress`, `/cards`, `/remind` (напоминание сработает, только пока бот запущен — полная ценность после деплоя на VPS). Дальше: деплой на VPS (systemd-сервис, .env, БД) или SRS-повторения карточек.
 
 ## Важные решения
 См. `.ai/decisions.md`
