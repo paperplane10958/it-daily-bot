@@ -10,6 +10,15 @@ from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
 
 from src.bot.handlers import router as message_router
+from src.bot.handlers import runtime
+from src.bot.progress import ProgressStore
+from src.agent.store import LessonStore
+
+
+def init_stores(db_path) -> None:
+    """Открыть stores уроков/прогресса и отдать их хендлерам (runtime)."""
+    runtime["lessons"] = LessonStore(db_path)
+    runtime["progress"] = ProgressStore(db_path)
 
 
 def build_dispatcher(token: str) -> Dispatcher:
@@ -48,6 +57,7 @@ def main() -> None:
     if proxy:
         logging.info("использую прокси для Telegram: %s", proxy)
 
+    init_stores(os.getenv("LESSONS_DB", "data/lessons.db"))
     bot = build_bot(token, proxy)
     dp = build_dispatcher(token)
 

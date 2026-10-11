@@ -63,7 +63,7 @@ async def test_help_lists_commands():
     msg = FakeMessage()
     await handle_help(msg)
     assert msg.sent
-    assert "/start" in msg.sent[0] and "/help" in msg.sent[0]
+    assert "/lesson" in msg.sent[0] and "/progress" in msg.sent[0]
 
 
 @pytest.mark.asyncio
@@ -103,3 +103,20 @@ def test_dispatcher_includes_router():
 
     dp = build_dispatcher("123:test")
     assert "messages" in [r.name for r in dp.sub_routers], "роутер не подключён"
+
+
+def test_init_stores_wires_runtime(tmp_path):
+    from src.bot.__main__ import init_stores
+    from src.agent.store import LessonStore
+    from src.bot.progress import ProgressStore
+    from src.bot.handlers import runtime
+
+    init_stores(tmp_path / "lessons.db")
+    try:
+        assert isinstance(runtime["lessons"], LessonStore)
+        assert isinstance(runtime["progress"], ProgressStore)
+    finally:
+        runtime["lessons"].close()
+        runtime["progress"].close()
+        runtime["lessons"] = None
+        runtime["progress"] = None
