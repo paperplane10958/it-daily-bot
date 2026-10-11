@@ -34,11 +34,16 @@ git clone https://github.com/paperplane10958/it-daily-bot.git ~/it-daily-bot
 
 ## 2. Python и зависимости (uv, без sudo)
 
+Код требует Python ≥ 3.10 (aiogram 3.31, синтаксис 3.10+). На старых дистрибутивах
+(Debian 11 = 3.9) системный Python не трогаем — uv ставит собственный:
+
 ```bash
 cd ~/it-daily-bot
 if [ ! -x ~/.local/bin/uv ]; then curl -LsSf https://astral.sh/uv/install.sh | sh; fi
 export PATH="$HOME/.local/bin:$PATH"
-uv venv .venv
+uv python install 3.13
+rm -rf .venv
+uv venv .venv --python 3.13
 uv pip install -r requirements.txt --python .venv/bin/python
 ```
 
