@@ -98,6 +98,23 @@ def test_build_bot_plain_without_proxy():
     assert bot.session.proxy is None
 
 
+def test_build_bot_sets_html_parse_mode():
+    """Рендер урока шлёт HTML-теги — parse_mode='HTML' должен быть дефолтом бота."""
+    from src.bot.__main__ import build_bot
+
+    for proxy in ("socks5://localhost:1080", None):
+        bot = build_bot("123:test", proxy)
+        assert bot.default.parse_mode == "HTML", f"parse_mode не задан (proxy={proxy!r})"
+
+
+@pytest.mark.asyncio
+async def test_echo_escapes_html():
+    """Пользовательский текст уходит как есть — при HTML-режиме `<` сломает отправку."""
+    msg = FakeMessage("1<2 и a&b")
+    await handle_echo(msg)
+    assert msg.sent == ["1&lt;2 и a&amp;b"]
+
+
 def test_dispatcher_includes_router():
     from src.bot.__main__ import build_dispatcher
 

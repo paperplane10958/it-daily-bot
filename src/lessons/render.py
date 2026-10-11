@@ -1,17 +1,39 @@
 """Рендер урока (docs/lesson.schema.json) в HTML-сообщения Telegram.
 
-Чистые функции без aiogram — тестируются без сети. Длины полей гарантированы
-валидатором (validate_lesson), но материалы всё равно пакуются жадно: 3 примера
-по 2000 символов сами по себе не влезают в один лимит Telegram.
+Чистые функции без aiogram — тестируются без сети. У бота включён дефолтный
+parse_mode="HTML", поэтому весь вывод обязан быть валидным Telegram-HTML:
+LLM-текст сначала экранируется, затем его markdown (**жирный**, `код`,
+```-блоки) конвертируется в разрешённые Bot API теги (<b>, <code>, <pre>).
+Длины полей гарантированы валидатором (validate_lesson), но материалы всё
+равно пакуются жадно: 3 примера по 2000 символов сами по себе не влезают
+в один лимит Telegram.
 """
 
 import html
+import re
 
 TG_MESSAGE_LIMIT = 4000  # тот же запас, что в валидаторе
+
+_MD_FENCE_RE = re.compile(r"```(?:[a-zA-Z0-9_+\-]+)?\n(.*?)```", re.DOTALL)
+_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
+_MD_CODE_RE = re.compile(r"`([^`\n]+)`")
 
 
 def _esc(text) -> str:
     return html.escape(str(text), quote=False)
+
+
+def _md_to_html(text: str) -> str:
+    """Экранировать LLM-текст и конвертировать его markdown в теги Telegram.
+
+    Порядок важен: сначала экранирование (``<`` в коде не станет тегом),
+    потом ```-блоки -> <pre>, потом ** -> <b>, потом ` -> <code>.
+    """
+    s = _esc(text)
+    s = _MD_FENCE_RE.sub(r"<pre>\1</pre>", s)
+    s = _MD_BOLD_RE.sub(r"<b>\1</b>", s)
+    s = _MD_CODE_RE.sub(r"<code>\1</code>", s)
+    return s
 
 
 def _bulleted(items: list[str], mark: str = "•") -> str:
@@ -41,7 +63,7 @@ def _pack(blocks: list[str], limit: int = TG_MESSAGE_LIMIT) -> list[str]:
 def _render_intro(lesson: dict) -> str:
     parts = [
         f"🎓 <b>{_esc(lesson['title'])}</b>  (≈{lesson['est_minutes']} мин, +{lesson['xp']} XP)",
-        _esc(lesson["hook"]),
+        _md_to_html(lesson["hook"]),
     ]
     if lesson.get("objectives"):
         parts.append("После урока ты сможешь:\n" + _bulleted(lesson["objectives"], "✅"))
@@ -49,7 +71,7 @@ def _render_intro(lesson: dict) -> str:
 
 
 def _render_theory(section: dict) -> str:
-    return f"<b>{_esc(section['heading'])}</b>\n\n{section['body']}"
+    return f"<b>{_esc(section['heading'])}</b>\n\n{_md_to_html(section['body'])}"
 
 
 def _render_materials(lesson: dict) -> list[str]:
@@ -59,15 +81,15 @@ def _render_materials(lesson: dict) -> list[str]:
         lines = [f"<b>{_esc(t['term'])}</b> — {_esc(t['definition'])}" for t in lesson["key_terms"]]
         blocks.append("📚 Ключевые термины:\n" + "\n".join(lines))
     for ex in lesson.get("examples", []):
-        block = f"💡 <b>{_esc(ex['title'])}</b>\n{_esc(ex['body'])}"
+        block = f"💡 <b>{_esc(ex['title'])}</b>\n{_md_to_html(ex['body'])}"
         if ex.get("code"):
             block += f"\n\n<pre>{_esc(ex['code'])}</pre>"
         blocks.append(block)
     if lesson.get("practice"):
         pr = lesson["practice"]
-        block = f"✍️ Попробуй сам: {_esc(pr['prompt'])}"
+        block = f"✍️ Попробуй сам: {_md_to_html(pr['prompt'])}"
         if pr.get("hint"):
-            block += f"\n\nПодсказка: {_esc(pr['hint'])}"
+            block += f"\n\nПодсказка: {_md_to_html(pr['hint'])}"
         blocks.append(block)
     if lesson.get("pitfalls"):
         blocks.append("⚠️ Частые ошибки:\n" + _bulleted(lesson["pitfalls"]))

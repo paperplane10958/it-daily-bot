@@ -6,6 +6,8 @@ callback_data — 64 байта: канонический id урока огра
 короткие. Если урок из callback не найден в базе — просим вызвать /lesson заново.
 """
 
+import html
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
@@ -142,7 +144,8 @@ async def answer_callback(cb, lessons, progress) -> None:
     is_correct = chosen == set(q["correct"])
     ok_new = parsed["ok"] + (1 if is_correct else 0)
     verdict = "✅ Верно!" if is_correct else "❌ Неверно."
-    explanation = f"\n💬 {q['explanation']}"
+    # explanation — текст от LLM: экранируем (parse_mode=HTML дефолтный)
+    explanation = f"\n💬 {html.escape(q['explanation'], quote=False)}"
 
     nxt = parsed["qidx"] + 1
     if nxt < len(lesson["quiz"]):
@@ -246,4 +249,6 @@ async def progress_command(message: Message) -> None:
 @router.message()
 async def handle_echo(message: Message) -> None:
     if message.text:
-        await message.answer(message.text)
+        # parse_mode=HTML включён дефолтно: пользовательский текст экранируем,
+        # иначе «1<2» уронит отправку с 400 can't parse entities
+        await message.answer(html.escape(message.text, quote=False))

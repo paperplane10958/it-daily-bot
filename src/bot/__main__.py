@@ -7,6 +7,7 @@ import sys
 from urllib.parse import urlparse
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
 
 from src.bot.handlers import router as message_router
@@ -33,6 +34,7 @@ def build_bot(token: str, proxy: str | None = None) -> Bot:
     В сетях, где api.telegram.org недоступен напрямую, нужен прокси:
     BOT_PROXY=socks5://localhost:1080
     """
+    props = DefaultBotProperties(parse_mode="HTML")  # рендер урока шлёт HTML-теги
     if proxy:
         parsed = urlparse(proxy)
         scheme = parsed.scheme.lower()
@@ -40,9 +42,9 @@ def build_bot(token: str, proxy: str | None = None) -> Bot:
             from aiogram.client.session.aiohttp import AiohttpSession
 
             session = AiohttpSession(proxy=proxy)
-            return Bot(token=token, session=session)
-        return Bot(token=token)  # http(s) aiogram поймёт через env сам
-    return Bot(token=token)
+            return Bot(token=token, session=session, default=props)
+        return Bot(token=token, default=props)  # http(s) aiogram поймёт через env сам
+    return Bot(token=token, default=props)
 
 
 def main() -> None:

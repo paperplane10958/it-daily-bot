@@ -213,6 +213,19 @@ async def test_after_submit_next_question_shown():
 
 
 @pytest.mark.asyncio
+async def test_explanation_is_escaped():
+    """Explanation от LLM уходит в edit_text при parse_mode='HTML' — сырой '<' недопустим."""
+    lessons, progress = stores()
+    lesson = json.loads(json.dumps(EXAMPLE, ensure_ascii=False))
+    lesson["quiz"][0]["explanation"] = "x < y и a&b"
+    store = FakeLessonStore([lesson])
+    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson['id']}:0:{1 << 0}:0")
+    await answer_callback(cb, store, progress)
+    texts = [t for _, t, _ in cb.message.sent]
+    assert any("x &lt; y и a&amp;b" in t for t in texts), "explanation должен экранироваться"
+
+
+@pytest.mark.asyncio
 async def test_garbage_callback_does_not_crash():
     lessons, progress = stores()
     cb = FakeCallback("quiz:bad:data")

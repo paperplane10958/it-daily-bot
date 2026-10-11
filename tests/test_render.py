@@ -1,6 +1,7 @@
 """Тесты рендера урока в HTML-сообщения Telegram (без aiogram, чистые функции)."""
 
 import json
+import re
 from pathlib import Path
 
 from src.lessons.render import lesson_messages, render_quiz_question, render_result
@@ -29,7 +30,9 @@ def test_theory_sections_rendered_with_headings():
     joined = "\n".join(msgs)
     for section in EXAMPLE["theory"]:
         assert section["heading"] in joined
-        assert section["body"] in joined
+        # body проходит экранирование + markdown->HTML конвертацию:
+        # сравниваем по началу без спецсимволов, валидность HTML проверяет отдельный тест
+        assert section["body"][:60].replace("`", "") in joined.replace("<code>", "").replace("</code>", "")
 
 
 def test_html_is_escaped():
@@ -77,6 +80,56 @@ def test_result_renders_score_and_xp():
     text = render_result(EXAMPLE, correct=3, total=4, xp=12)
     assert "3/4" in text
     assert "12" in text
+
+
+def test_theory_markdown_converted_to_html():
+    """LLM пишет markdown (**жирный**, `код`, ```-блоки) — конвертим в теги Telegram."""
+    lesson = json.loads(json.dumps(EXAMPLE, ensure_ascii=False))
+    lesson["theory"][0]["body"] = (
+        "Это **важно** и код `x = 1`, а также:\n```\nprint(1)\n```"
+    )
+    joined = "\n".join(lesson_messages(lesson))
+    assert "<b>важно</b>" in joined
+    assert "<code>x = 1</code>" in joined
+    assert "<pre>" in joined and "print(1)" in joined, "fence -> блок кода"
+
+
+# Теги, которые Telegram разрешает в HTML-режиме (docs/lesson-schema.md, bot API)
+ALLOWED_TAGS_RE = (
+    r'<a href="[^"]*">|</a>|</?(?:b|strong|i|em|u|s|strike|del|code|pre|blockquote|tg-spoiler)>'
+)
+
+
+def _html_safety_errors(text: str) -> list[str]:
+    """Остатки сырого HTML после удаления разрешённых тегов = 400 от Telegram."""
+    rest = re.sub(ALLOWED_TAGS_RE, "", text)
+    errors = []
+    if "<" in rest:
+        errors.append(f"сырой '<': {rest[rest.index('<') - 30:rest.index('<') + 30]!r}")
+    if re.search(r"&(?!(?:amp|lt|gt|quot|#\d+);)", rest):
+        errors.append("сырой '&' вне экранирования")
+    return errors
+
+
+def test_render_output_is_valid_telegram_html():
+    """Весь вывод рендера должен быть HTML-безопасным при parse_mode='HTML'."""
+    texts = lesson_messages(EXAMPLE) + [render_quiz_question(EXAMPLE, i) for i in range(len(EXAMPLE["quiz"]))]
+    texts.append(render_result(EXAMPLE, 3, 5, 12))
+    for t in texts:
+        assert _html_safety_errors(t) == [], _html_safety_errors(t)
+
+
+def test_nasty_llm_output_still_renders():
+    """`<`, `&`, попытка инъекции в theory/examples не ломают отправку."""
+    lesson = json.loads(json.dumps(EXAMPLE, ensure_ascii=False))
+    lesson["theory"][0]["body"] = "a < b && c > d <script>alert(1)</script> **жирный**"
+    lesson["examples"] = [{"title": "t<b", "body": "5<6 & 7>3", "code": "if a<b: pass"}]
+    texts = lesson_messages(lesson)
+    for t in texts:
+        assert _html_safety_errors(t) == [], _html_safety_errors(t)
+    joined = "\n".join(texts)
+    assert "<script>" not in joined
+    assert "<b>жирный</b>" in joined  # markdown конвертится уже после экранирования
 
 
 def test_empty_optional_blocks_dont_crash():
