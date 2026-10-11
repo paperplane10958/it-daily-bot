@@ -1,0 +1,27 @@
+# IT Daily Bot — systemd-юнит
+# Установка (заменить CHANGE_ME на имя пользователя сервера):
+#   sed "s/CHANGE_ME/$USER/" deploy/it-daily-bot.service | sudo tee /etc/systemd/system/it-daily-bot.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now it-daily-bot
+#
+# Assumes: код в ~/it-daily-bot, venv в ~/it-daily-bot/.venv, .env рядом с кодом.
+
+[Unit]
+Description=IT Daily Bot (Telegram, aiogram long-polling)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=CHANGE_ME
+Group=CHANGE_ME
+WorkingDirectory=%h/it-daily-bot
+ExecStart=%h/it-daily-bot/.venv/bin/python -m src.bot.__main__
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+# Защита машины с VPN: боту хватает ~100 МБ; при утечке его убьёт и поднимет Restart,
+# а не OOM-killer по всему серверу.
+MemoryMax=350M
+
+[Install]
+WantedBy=multi-user.target
