@@ -1,5 +1,29 @@
 # Журнал работы агентов
 
+## 2026-10-11 — OpenRouter + схема урока v1
+
+**Агент:** Hermes (GLM)
+**Задача:** закоммитить решение по контенту, зафиксировать LLM-провайдера, спроектировать схему урока.
+
+### Сделано
+- Закоммичены правки прошлого агента по архитектуре контента (`88cfa80`).
+- Решение зафиксировано: LLM-провайдер — OpenRouter (OpenAI-совместимый API, `OPENROUTER_API_KEY` в `.env`).
+- Спроектирована схема урока v1: JSON Schema (`docs/lesson.schema.json`), дизайн-док (`docs/lesson-schema.md`), эталонный урок-пример (`docs/examples/lesson-what-is-the-internet.json`).
+- Проверено: пример валиден по схеме (jsonschema, 0 ошибок), семантика квиза (kind↔correct, индексы) и лимиты рендера Telegram — OK.
+
+### Изменённые файлы
+- `docs/lesson.schema.json`, `docs/lesson-schema.md`, `docs/examples/lesson-what-is-the-internet.json`
+- `.ai/decisions.md`, `.ai/context.md`
+
+### Не доделано / риски
+- Валидатор `validate_lesson` (схема + семантика квиза) ещё не код — сейчас проверено скриптом ad-hoc.
+- Эталонный урок написан вручную, не сгенерирован LLM — качество генерации проверим на пайплайне.
+
+### Как проверить
+- `python3 -c "import json,jsonschema; jsonschema.Draft202012Validator(json.load(open('docs/lesson.schema.json'))).validate(json.load(open('docs/examples/lesson-what-is-the-internet.json')))"` — без вывода = OK.
+
+---
+
 ## 2026-10-11 — Решение по архитектуре контента
 
 **Агент:** Zed (GLM)
