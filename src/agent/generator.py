@@ -45,7 +45,7 @@ def build_prompt(topic: str, roadmap_id: str, source_md: str = "") -> str:
   "difficulty": 1,
   "est_minutes": <целое 5-15>,
   "xp": <целое 10-30>,
-  "status": "review",
+  "status": "published",
   "title": "<заголовок урока на русском, до 100 симв.>",
   "hook": "<зачем это нужно: 1-2 предложения, цепляющие, до 400 симв.>",
   "objectives": ["<после урока ты сможешь...>", "..."],   // 2-3 штуки
