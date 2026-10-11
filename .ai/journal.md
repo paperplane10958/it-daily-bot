@@ -1,5 +1,36 @@
 # Журнал работы агентов
 
+## 2026-10-11 — Генерация всех 26 тем + выдача уроков в боте (/lesson, квиз, XP)
+
+**Агент:** Hermes (GLM)
+**Задача:** догенерировать roadmap backend-beginner, сделать выдачу уроков в боте (по выбору пользователя — сразу полный цикл: квиз-кнопки + XP + таблица progress).
+
+### Сделано
+- **Второй баг пайплайна (найден на живой генерации):** LLM каждый раз выдумывает новый id урока (`javascript-basics-intro` vs `javascript-intro-basics`), а дедуп-проверка `generate` сравнивала по id от LLM → перезапуск плодил дубликаты. Успел положить 3 (2 дубликата + Go). Фикс (TDD, `tests/test_cli.py`): `lesson_id()` = канонический `'<roadmap>-<slug>'`, назначает пайплайн (`lesson['id'] = lid` перед upsert), дедуп по нему же. База почищена: 3 урока под каноническими id, порядок = topics.json.
+- **Генерация завершена:** 23 сгенерировано, 3 пропущено, 0 брак. В базе 26 уроков, все `published`, порядок 1..26 без дыр, средняя theory-секция 573 симв. Haiku-5.5: ~30 с/урок, 2 попытки потребовались лишь 4 темам (семантика квиза).
+- **Выдача уроков (4 TDD-слайса, RED→GREEN каждый):**
+  - `src/lessons/render.py` — рендер урока в HTML-сообщения: экранирование (кроме тела theory — там markdown от LLM), жадная упаковка материалов в сообщения ≤4000, `<pre>` для кода, ссылка-источники.
+  - `src/bot/progress.py` — таблица `progress (user_id, lesson_id, correct, total, xp)` в той же SQLite, upsert (актуален последний результат).
+  - `src/lessons/xp.py` — полный XP за идеальный квиз, половина с округлением вверх иначе, 0 за ноль.
+  - `src/bot/handlers.py` — `/lesson` (следующий непройденный урок + первый вопрос), квиз без серверного состояния: битовая маска выбора + счёт верных путешествуют в callback_data; single = тап сразу отвечает, multi = toggle + «Выбрать все» + «Ответить»; после ответа вердикт + explanation, после последнего — итог и запись прогресса. `/progress` — пройдено/XP.
+  - `src/bot/__main__.py` — `init_stores()` подключает `LessonStore`+`ProgressStore` к хендлерам (`runtime` dict, `LESSONS_DB` переопределяет путь).
+
+### Изменённые файлы
+- `src/agent/cli.py` (канонический id), `src/lessons/render.py`, `src/lessons/xp.py`, `src/bot/progress.py`, `src/bot/handlers.py`, `src/bot/__main__.py`, `tests/test_cli.py`, `tests/test_render.py`, `tests/test_xp.py`, `tests/test_progress.py`, `tests/test_lesson_handlers.py`, `tests/test_bot_handlers.py`, `.ai/context.md`
+
+### Не доделано / риски
+- Бот у пользователя работает со старым кодом — нужен перезапуск `python -m src.bot.__main__`, чтобы появились /lesson и /progress.
+- Стрики/серии — следующий этап (данные для них уже есть: `updated_at` в progress).
+- Квиз-состояние живёт в callback_data: если урок перегенерировать, старые кнопки в чатах дадут «Урок обновился — отправь /lesson заново» (обработано).
+- `runtime` dict — простая зависимость; при росте можно заменить на aiogram middleware/контейнер.
+
+### Как проверить
+- `.venv/bin/python -m pytest tests/ -q` → 86 passed (проверено).
+- `.venv/bin/python -c "import sqlite3; print(sqlite3.connect('data/lessons.db').execute(\"select count(*) from lessons where status='published'\").fetchone()[0])"` → 26 (проверено; утилиты sqlite3 в системе нет).
+- Перезапустить бота → `/lesson` выдаёт урок, квиз по кнопкам начисляет XP, `/progress` показывает «1 из 26» после прохождения.
+
+---
+
 ## 2026-10-11 — Платная модель haiku-5.5, фикс meta.model, первая генерация
 
 **Агент:** Hermes (GLM)

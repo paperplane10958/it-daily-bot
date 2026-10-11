@@ -14,17 +14,19 @@
 - [x] Репозиторий на GitHub: paperplane10958/it-daily-bot (SSH)
 - [x] Контент-агент: roadmap.sh → темы (26 тем backend-beginner), генерация через OpenRouter, SQLite — **клиент OpenRouter переведён на httpx (urllib блокируется 403)**, автопубликация (status=published)
 - [x] Первая реальная генерация уроков: 2 урока в базе (`data/lessons.db`, published, модель haiku-5.5)
-- [ ] Выдача уроков в боте (/lesson + прогресс пользователя)
-- [ ] Геймификация (стрики, XP)
+- [x] Генерация всех 26 тем backend-beginner (0 брак, канонические id `<roadmap>-<slug>`, дедуп по ним же)
+- [x] Выдача уроков в боте: /lesson (контент + квиз-кнопки, XP), /progress, таблица progress в SQLite
+- [ ] Геймификация (стрики, XP-серия, карточки key_terms)
+- [ ] Пользователь проверяет бота вживую: /lesson в @it_daily_paperplane_bot (нужен перезапуск бота)
 
 ## Ключевые факты окружения
 - Сеть блокирует api.telegram.org напрямую → `BOT_PROXY=socks5://localhost:1080` (прокси из `~/.ssh/config`, DynamicForward 1080) в `.env`.
 - OpenRouter блокирует python-urllib по TLS-отпечатку (403) → клиент на httpx (прокси берёт из env `ALL_PROXY`).
-- `.env`: BOT_TOKEN, OPENROUTER_API_KEY заданы; `LLM_MODEL=anthropic/claude-haiku-5.5` (~$0.003/урок, ~30 с). Тесты: 50 passed.
+- `.env`: BOT_TOKEN, OPENROUTER_API_KEY заданы; `LLM_MODEL=anthropic/claude-haiku-5.5` (~$0.003/урок, ~30 с). Тесты: 86 passed.
 - Ветки: `main` (бот+валидатор+CI), `feat/content-agent` (контент-агент, актуальная работа).
 
 ## Следующий шаг
-Сгенерировать остальные 24 темы: `.venv/bin/python -m src.agent.cli generate --roadmap backend-beginner --limit 24` (~15 мин). Затем выдача уроков в боте: /lesson берёт `next_published_lesson`, рендерит theory секциями, квиз кнопками.
+Перезапустить бота и проверить вживую: `/lesson` (урок секциями + квиз-кнопки + XP), `/progress`. Затем геймификация: стрики (дни подряд с пройденным уроком), XP-серия, карточки повторения из key_terms.
 
 ## Важные решения
 См. `.ai/decisions.md`
