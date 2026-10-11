@@ -1,0 +1,213 @@
+{
+ "roadmap_id": "backend-beginner",
+ "topics": [
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "8-lO-v6jCYYoklEJXULxN",
+   "label": "JavaScript",
+   "kind": "subtopic",
+   "x": -555.4238043165935,
+   "y": 4.592802631447057
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "2f0ZO6GJElfZ2Eis28Hzg",
+   "label": "Pick a Language",
+   "kind": "topic",
+   "x": -310.2043395768536,
+   "y": 54.70730350215206
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "BdXbcz4-ar3XOX0wIKzBp",
+   "label": "Go",
+   "kind": "subtopic",
+   "x": -555.4238043165935,
+   "y": 57.59280263144706
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "J_sVHsD72Yzyqb9KCIvAY",
+   "label": "Python",
+   "kind": "subtopic",
+   "x": -555.4238043165935,
+   "y": 110.59280263144706
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "_I1E__wCIVrhjMk6IMieE",
+   "label": "Git",
+   "kind": "subtopic",
+   "x": -532.4238043165935,
+   "y": 309.642069464665
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "ezdqQW9wTUw93F6kjOzku",
+   "label": "Version Control Systems",
+   "kind": "topic",
+   "x": -310.2043395768536,
+   "y": 309.642069464665
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "ptD8EVqwFUYr4W5A_tABY",
+   "label": "Github",
+   "kind": "subtopic",
+   "x": -532.4238043165935,
+   "y": 366.10143585693174
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "NvUcSDWBhzJZ31nzT4UlE",
+   "label": "Repo hosting services",
+   "kind": "topic",
+   "x": -310.2043395768536,
+   "y": 366.10143585693174
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "r45b461NxLN6wBODJ5CNP",
+   "label": "Relational Databases",
+   "kind": "topic",
+   "x": -310.2043395768536,
+   "y": 485.10143585693174
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "FihTrMO56kj9jT8O_pO2T",
+   "label": "PostgreSQL",
+   "kind": "subtopic",
+   "x": 6.417691768524833,
+   "y": 485.10143585693174
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "lfNFDZZNdrB0lbEaMtU71",
+   "label": "REST",
+   "kind": "subtopic",
+   "x": 6.417691768524833,
+   "y": 582.9941785421215
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "EwvLPSI6AlZ4TnNIJTZA4",
+   "label": "Learn about APIs",
+   "kind": "topic",
+   "x": -309.58230823147517,
+   "y": 635.9941785421215
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "sNceS4MpSIjRkWhNDmrFg",
+   "label": "JSON APIs",
+   "kind": "subtopic",
+   "x": 8.678189763286014,
+   "y": 635.9941785421215
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "PY9G7KQy8bF6eIdr1ydHf",
+   "label": "Authentication",
+   "kind": "subtopic",
+   "x": 8.678189763286014,
+   "y": 689.9126418589183
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "g8GjkJAhvnSxXTZks0V1g",
+   "label": "Redis",
+   "kind": "subtopic",
+   "x": -465.97806963137555,
+   "y": 726.4861514388111
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "ELj8af7Mi38kUbaPJfCUR",
+   "label": "Caching",
+   "kind": "topic",
+   "x": -310.2043395768536,
+   "y": 726.4861514388111
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "UxS_mzVUjLigEwKrXnEeB",
+   "label": "JWT",
+   "kind": "subtopic",
+   "x": 20.030089179073684,
+   "y": 749.5986472065365
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "Z7jp_Juj5PffSxV7UZcBb",
+   "label": "ORMs",
+   "kind": "subtopic",
+   "x": -610.8178956686777,
+   "y": 958.4323026615212
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "LJt27onEOeIBomiEMTyKd",
+   "label": "More about Databases",
+   "kind": "topic",
+   "x": -310.2043395768536,
+   "y": 1011.4323026615211
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "qSAdfaGUfn8mtmDjHJi3z",
+   "label": "ACID",
+   "kind": "subtopic",
+   "x": -610.8178956686777,
+   "y": 1012.4323026615212
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "rq_y_OBMD9AH_4aoecvAi",
+   "label": "Transactions",
+   "kind": "subtopic",
+   "x": -610.8178956686777,
+   "y": 1066.4323026615211
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "bQnOAu863hsHdyNMNyJop",
+   "label": "N+1 Problem",
+   "kind": "subtopic",
+   "x": -610.8178956686777,
+   "y": 1120.4323026615211
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "381Kw1IMRv7CJp-Uf--qd",
+   "label": "Integration Testing",
+   "kind": "subtopic",
+   "x": 43.00948964805815,
+   "y": 1187.4900452642225
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "3OYm6b9f6WOrKi4KTOZYK",
+   "label": "Unit Testing",
+   "kind": "subtopic",
+   "x": 43.00948964805815,
+   "y": 1241.4900452642225
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "STQQbPa7PE3gbjMdL6P-t",
+   "label": "Testing",
+   "kind": "topic",
+   "x": -310.2043395768536,
+   "y": 1244.3669598992026
+  },
+  {
+   "roadmap_id": "backend-beginner",
+   "node_id": "NAGisfq2CgeK3SsuRjnMw",
+   "label": "Functional Testing",
+   "kind": "subtopic",
+   "x": 43.00948964805815,
+   "y": 1295.4900452642225
+  }
+ ]
+}

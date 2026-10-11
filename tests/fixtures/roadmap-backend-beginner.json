@@ -1,0 +1,342 @@
+{
+ "_id": "x",
+ "title": "Backend Developer",
+ "description": "test",
+ "slug": "backend-beginner",
+ "nodes": [
+  {
+   "id": "sec1",
+   "type": "section",
+   "position": {
+    "x": 0,
+    "y": 0
+   },
+   "data": {
+    "label": ""
+   }
+  },
+  {
+   "id": "EwvLPSI6AlZ4TnNIJTZA4",
+   "type": "topic",
+   "position": {
+    "x": -309.58230823147517,
+    "y": 635.9941785421215
+   },
+   "data": {
+    "label": "Learn about APIs"
+   }
+  },
+  {
+   "id": "BdXbcz4-ar3XOX0wIKzBp",
+   "type": "subtopic",
+   "position": {
+    "x": -555.4238043165935,
+    "y": 57.59280263144706
+   },
+   "data": {
+    "label": "Go"
+   }
+  },
+  {
+   "id": "8-lO-v6jCYYoklEJXULxN",
+   "type": "subtopic",
+   "position": {
+    "x": -555.4238043165935,
+    "y": 4.592802631447057
+   },
+   "data": {
+    "label": "JavaScript"
+   }
+  },
+  {
+   "id": "J_sVHsD72Yzyqb9KCIvAY",
+   "type": "subtopic",
+   "position": {
+    "x": -555.4238043165935,
+    "y": 110.59280263144706
+   },
+   "data": {
+    "label": "Python"
+   }
+  },
+  {
+   "id": "2f0ZO6GJElfZ2Eis28Hzg",
+   "type": "topic",
+   "position": {
+    "x": -310.2043395768536,
+    "y": 54.70730350215206
+   },
+   "data": {
+    "label": "Pick a Language"
+   }
+  },
+  {
+   "id": "_I1E__wCIVrhjMk6IMieE",
+   "type": "subtopic",
+   "position": {
+    "x": -532.4238043165935,
+    "y": 309.642069464665
+   },
+   "data": {
+    "label": "Git"
+   }
+  },
+  {
+   "id": "ezdqQW9wTUw93F6kjOzku",
+   "type": "topic",
+   "position": {
+    "x": -310.2043395768536,
+    "y": 309.642069464665
+   },
+   "data": {
+    "label": "Version Control Systems"
+   }
+  },
+  {
+   "id": "ptD8EVqwFUYr4W5A_tABY",
+   "type": "subtopic",
+   "position": {
+    "x": -532.4238043165935,
+    "y": 366.10143585693174
+   },
+   "data": {
+    "label": "Github"
+   }
+  },
+  {
+   "id": "NvUcSDWBhzJZ31nzT4UlE",
+   "type": "topic",
+   "position": {
+    "x": -310.2043395768536,
+    "y": 366.10143585693174
+   },
+   "data": {
+    "label": "Repo hosting services"
+   }
+  },
+  {
+   "id": "FihTrMO56kj9jT8O_pO2T",
+   "type": "subtopic",
+   "position": {
+    "x": 6.417691768524833,
+    "y": 485.10143585693174
+   },
+   "data": {
+    "label": "PostgreSQL"
+   }
+  },
+  {
+   "id": "r45b461NxLN6wBODJ5CNP",
+   "type": "topic",
+   "position": {
+    "x": -310.2043395768536,
+    "y": 485.10143585693174
+   },
+   "data": {
+    "label": "Relational Databases"
+   }
+  },
+  {
+   "id": "Z7jp_Juj5PffSxV7UZcBb",
+   "type": "subtopic",
+   "position": {
+    "x": -610.8178956686777,
+    "y": 958.4323026615212
+   },
+   "data": {
+    "label": "ORMs"
+   }
+  },
+  {
+   "id": "qSAdfaGUfn8mtmDjHJi3z",
+   "type": "subtopic",
+   "position": {
+    "x": -610.8178956686777,
+    "y": 1012.4323026615212
+   },
+   "data": {
+    "label": "ACID"
+   }
+  },
+  {
+   "id": "rq_y_OBMD9AH_4aoecvAi",
+   "type": "subtopic",
+   "position": {
+    "x": -610.8178956686777,
+    "y": 1066.4323026615211
+   },
+   "data": {
+    "label": "Transactions"
+   }
+  },
+  {
+   "id": "bQnOAu863hsHdyNMNyJop",
+   "type": "subtopic",
+   "position": {
+    "x": -610.8178956686777,
+    "y": 1120.4323026615211
+   },
+   "data": {
+    "label": "N+1 Problem"
+   }
+  },
+  {
+   "id": "LJt27onEOeIBomiEMTyKd",
+   "type": "topic",
+   "position": {
+    "x": -310.2043395768536,
+    "y": 1011.4323026615211
+   },
+   "data": {
+    "label": "More about Databases"
+   }
+  },
+  {
+   "id": "sNceS4MpSIjRkWhNDmrFg",
+   "type": "subtopic",
+   "position": {
+    "x": 8.678189763286014,
+    "y": 635.9941785421215
+   },
+   "data": {
+    "label": "JSON APIs"
+   }
+  },
+  {
+   "id": "lfNFDZZNdrB0lbEaMtU71",
+   "type": "subtopic",
+   "position": {
+    "x": 6.417691768524833,
+    "y": 582.9941785421215
+   },
+   "data": {
+    "label": "REST"
+   }
+  },
+  {
+   "id": "ELj8af7Mi38kUbaPJfCUR",
+   "type": "topic",
+   "position": {
+    "x": -310.2043395768536,
+    "y": 726.4861514388111
+   },
+   "data": {
+    "label": "Caching"
+   }
+  },
+  {
+   "id": "381Kw1IMRv7CJp-Uf--qd",
+   "type": "subtopic",
+   "position": {
+    "x": 43.00948964805815,
+    "y": 1187.4900452642225
+   },
+   "data": {
+    "label": "Integration Testing"
+   }
+  },
+  {
+   "id": "NAGisfq2CgeK3SsuRjnMw",
+   "type": "subtopic",
+   "position": {
+    "x": 43.00948964805815,
+    "y": 1295.4900452642225
+   },
+   "data": {
+    "label": "Functional Testing"
+   }
+  },
+  {
+   "id": "3OYm6b9f6WOrKi4KTOZYK",
+   "type": "subtopic",
+   "position": {
+    "x": 43.00948964805815,
+    "y": 1241.4900452642225
+   },
+   "data": {
+    "label": "Unit Testing"
+   }
+  },
+  {
+   "id": "STQQbPa7PE3gbjMdL6P-t",
+   "type": "topic",
+   "position": {
+    "x": -310.2043395768536,
+    "y": 1244.3669598992026
+   },
+   "data": {
+    "label": "Testing"
+   }
+  },
+  {
+   "id": "g8GjkJAhvnSxXTZks0V1g",
+   "type": "subtopic",
+   "position": {
+    "x": -465.97806963137555,
+    "y": 726.4861514388111
+   },
+   "data": {
+    "label": "Redis"
+   }
+  },
+  {
+   "id": "PY9G7KQy8bF6eIdr1ydHf",
+   "type": "subtopic",
+   "position": {
+    "x": 8.678189763286014,
+    "y": 689.9126418589183
+   },
+   "data": {
+    "label": "Authentication"
+   }
+  },
+  {
+   "id": "UxS_mzVUjLigEwKrXnEeB",
+   "type": "subtopic",
+   "position": {
+    "x": 20.030089179073684,
+    "y": 749.5986472065365
+   },
+   "data": {
+    "label": "JWT"
+   }
+  },
+  {
+   "id": "t1",
+   "type": "title",
+   "position": {
+    "x": 0,
+    "y": 10
+   },
+   "data": {
+    "label": "Backend"
+   }
+  },
+  {
+   "id": "p1",
+   "type": "paragraph",
+   "position": {
+    "x": 0,
+    "y": 20
+   },
+   "data": {
+    "label": "Have a look at the detailed version"
+   }
+  },
+  {
+   "id": "b1",
+   "type": "button",
+   "position": {
+    "x": 0,
+    "y": 30
+   },
+   "data": {
+    "label": "Backend Developer Roadmap"
+   }
+  }
+ ],
+ "edges": [],
+ "draft": false,
+ "type": "role",
+ "status": "published"
+}
