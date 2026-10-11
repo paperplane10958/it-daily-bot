@@ -1,5 +1,32 @@
 # Журнал работы агентов
 
+## 2026-10-11 — Деплой на VPS выполнен, бот живёт на сервере
+
+**Агент:** Hermes (GLM)
+**Задача:** поставить бота на сервер пользователя (1 CPU / 1 GB RAM, рядом AmneziaWG) по deploy/README.md.
+
+### Сделано
+- Деплой выполнен пользователем по инструкции; я вёл по выводу. По пути поймали и починили 3 вещи:
+  1. **Репо приватный** — HTTPS-clone требовал логин; решили SSH deploy key (read-only) на сервере.
+  2. **Python 3.9 на сервере (Debian 11)** — aiogram 3.31 требует ≥3.10; `uv python install 3.13` + venv под него, системный Python не тронут (доку обновил, `f1dee75`).
+  3. **aiohttp-socks отсутствовал в requirements.txt** (стоял локально из разового pip) — сервер честно упал на тесте build_bot; добавлен в requirements (`0865bbc`). Там же: тест `test_cmd_generate_assigns_canonical_id` не был герметичен (читал реальный .env) — monkeypatch-окружение.
+- **Прямой доступ к api.telegram.org с сервера есть** (curl → 302, TLS-рукопожатие прошло): на сервере BOT_PROXY закомментирован — за границей прокси не нужен, а localhost:1080 там никто не слушает.
+- База и .env перелиты scp; пользователь проверил /lesson и остальные команды — **всё работает**.
+- Бот запущен как systemd-сервис (`it-daily-bot`, Restart=always, MemoryMax=350M). Локальный бот больше не запускается — один токен, два long-polling конфликтуют.
+
+### Изменённые файлы
+- `requirements.txt` (+aiohttp-socks), `tests/test_cli.py` (герметичность), `deploy/README.md` (uv python install), `.ai/*`
+
+### Не доделано / риски
+- Обновления уроков/кода: генерация локально → scp lessons.db (с бэкапом на сервере: в базе progress + reminder_settings) → git pull на сервере. Памятка в deploy/README.md §6.
+- Свап на сервере не проверяли (MemoryMax смягчает OOM-риск); если появится — `free -h`.
+
+### Как проверить
+- `systemctl status it-daily-bot` → active (running); `journalctl -u it-daily-bot -f` — логи.
+- `/lesson` в боте выдаёт урок с серверной базы (проверено пользователем).
+
+---
+
 ## 2026-10-11 — Подготовка деплоя на VPS (systemd + инструкция)
 
 **Агент:** Hermes (GLM)
