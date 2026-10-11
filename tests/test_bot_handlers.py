@@ -1,4 +1,4 @@
-"""Тесты echo-бота: /start, /help и эхо любых сообщений."""
+"""Тесты echo-бота: /start, /help, эхо и конфигурация бота."""
 
 import pytest
 
@@ -78,3 +78,28 @@ async def test_echo_ignores_empty_message():
     msg = FakeMessage(None)
     await handle_echo(msg)
     assert msg.sent == []
+
+
+# --- конфигурация бота ---------------------------------------------------------
+
+
+def test_build_bot_uses_socks_session_when_proxy_set():
+    from src.bot.__main__ import build_bot
+    from aiogram.client.session.aiohttp import AiohttpSession
+
+    bot = build_bot("123:test", "socks5://localhost:1080")
+    assert isinstance(bot.session, AiohttpSession)
+
+
+def test_build_bot_plain_without_proxy():
+    from src.bot.__main__ import build_bot
+
+    bot = build_bot("123:test", None)
+    assert bot.session.proxy is None
+
+
+def test_dispatcher_includes_router():
+    from src.bot.__main__ import build_dispatcher
+
+    dp = build_dispatcher("123:test")
+    assert "messages" in [r.name for r in dp.sub_routers], "роутер не подключён"
