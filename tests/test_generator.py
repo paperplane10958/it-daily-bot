@@ -111,36 +111,42 @@ def test_openrouter_client_requires_key():
 
 
 def test_openrouter_client_builds_request(monkeypatch):
+    import httpx
+
     captured = {}
 
-    class FakeResp:
-        status = 200
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["url"] = url
+        captured["headers"] = headers or {}
+        captured["body"] = json or {}
+        return httpx.Response(
+            200,
+            request=httpx.Request("POST", url),
+            json={"choices": [{"message": {"content": "hello"}}]},
+        )
 
-        def read(self):
-            return json.dumps(
-                {"choices": [{"message": {"content": "hello"}}]}
-            ).encode()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    def fake_urlopen(req, timeout):
-        captured["url"] = req.full_url
-        captured["headers"] = dict(req.header_items())
-        captured["body"] = json.loads(req.data.decode())
-        return FakeResp()
-
-    import urllib.request
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(httpx, "post", fake_post)
 
     client = OpenRouterClient(api_key="test-key", model="test/model")
     out = client.complete("prompt text", system="sys")
     assert out == "hello"
     assert captured["url"] == "https://openrouter.ai/api/v1/chat/completions"
-    assert captured["headers"].get("Authorization") == "Bearer test-key"
+    assert captured["headers"]["Authorization"] == "Bearer test-key"
     assert captured["body"]["model"] == "test/model"
     assert captured["body"]["messages"][0] == {"role": "system", "content": "sys"}
+
+
+def test_openrouter_client_raises_on_403(monkeypatch):
+    import httpx
+
+    def fake_post(url, **kwargs):
+        return httpx.Response(
+            403,
+            request=httpx.Request("POST", url),
+            text='{"error": "denied"}',
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    client = OpenRouterClient(api_key="k")
+    with pytest.raises(RuntimeError, match="403"):
+        client.complete("x")

@@ -1,5 +1,32 @@
 # Журнал работы агентов
 
+## 2026-10-11 — Реальная генерация: запуск бота, прокси, OpenRouter через httpx
+
+**Агент:** Hermes (GLM)
+**Задача:** автопубликация уроков, запуск бота у пользователя, первая генерация.
+
+### Сделано
+- **Автопубликация:** промпт генератора теперь ставит `status: "published"` (решение пользователя).
+- **Бот запущен пользователем:** `@it_daily_paperplane_bot` отвечает, polling работает. Токен в `.env`.
+- **Прокси-проблема решена:** в этой сети `api.telegram.org` напрямую недоступен (urllib/curl без прокси → network unreachable). В `~/.ssh/config` есть SOCKS-прокси `DynamicForward 1080` → в `.env` добавлено `BOT_PROXY=socks5://localhost:1080`; `build_bot()` в `src/bot/__main__.py` строит `AiohttpSession(proxy=...)` при заданном `BOT_PROXY`. Deps: `pysocks`, `python-socks` (+ в requirements.txt). Тесты build_bot/dispatcher добавлены (48).
+- **OpenRouter блокирует python-urllib по TLS-отпечатку** (HTTP 403 "Access denied by security policy"; curl с тем же ключом/тела — 200). Фикс: `src/agent/openrouter.py` переписан на `httpx` (+ `httpx[socks]` в requirements); прокси httpx берёт из env (`ALL_PROXY=socks5://localhost:1080` уже задана в системе). httpx-запрос с ключом прошёл: 200, модель `nvidia/nemotron-3-ultra-550b-a55b:free` (это роутер `openrouter/free` из `.env` LLM_MODEL).
+- `.env`: `BOT_TOKEN` задан, `OPENROUTER_API_KEY` задан, `LLM_MODEL=openrouter/free` (роутер free-моделей), `BOT_PROXY=socks5://localhost:1080`.
+
+### Изменённые файлы
+- `src/bot/__main__.py` (BOT_PROXY), `src/agent/openrouter.py` (httpx), `.env.example` (+BOT_PROXY), `requirements.txt` (+pysocks, python-socks, httpx, socksio), `tests/test_bot_handlers.py`, `tests/test_generator.py`, `src/agent/generator.py` (status=published)
+
+### Не доделано / риски
+- **Первая реальная генерация не завершена**: `generate --limit 2` был прерван пользователем (долго: free-модель + reasoning). Клиент уже рабочий (проверен коротким запросом). Перезапуск: `.venv/bin/python -m src.agent.cli generate --roadmap backend-beginner --limit 2`. Возможно поставить модель пошустрее (`LLM_MODEL` в .env) или оставить openrouter/free.
+- Сайт roadmap.sh блокирует urllib (403 security policy) — topics fetching через urllib работал ранее; если упадёт — тот же переход на httpx.
+- Тесты: 49 passed на текущем main-состоянии ветки feat/content-agent.
+
+### Как проверить
+- `.venv/bin/python -m pytest tests/ -q` → 49 passed.
+- Генерация: `.venv/bin/python -m src.agent.cli generate --roadmap backend-beginner --limit 2` (несколько минут, free-роутер; в конце «итог: N сгенерировано»).
+- База: `sqlite3 data/lessons.db "SELECT id, status, title FROM lessons;"`.
+
+---
+
 ## 2026-10-11 — Контент-агент: roadmap → OpenRouter → SQLite
 
 **Агент:** Hermes (GLM)
