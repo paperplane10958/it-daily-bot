@@ -1,5 +1,29 @@
 # Журнал работы агентов
 
+## 2026-10-11 — Подготовка деплоя на VPS (systemd + инструкция)
+
+**Агент:** Hermes (GLM)
+**Задача:** подготовить деплой на сервер пользователя 1 CPU / 1 GB RAM (рядом уже AmneziaWG, бот пока для одного пользователя).
+
+### Сделано
+- Оценка нагрузки для пользователя: бот ~50–100 МБ RSS и ~0 CPU (long-polling, SQLite, 1 юзер); критичного для AmneziaWG нет; рекомендованы swap 2G и systemd Restart=always.
+- `deploy/it-daily-bot.service`: Restart=always, RestartSec=5, **MemoryMax=350M** — при утечке systemd убьёт и поднимет бота, а не OOM-killer по всему серверу; PYTHONUNBUFFERED=1 (журнал в journald пишется живьём).
+- `deploy/README.md`: clone с GitHub (HTTPS, без ключа), uv-venv без sudo, scp `data/lessons.db` и `.env` с рабочей машины, проверка `curl https://api.telegram.org` с сервера (за границей BOT_PROXY не нужен), ручная проверка pytest+бота перед сервисом, конфликт двух long-polling с одним токеном, цикл обновления с бэкапом базы (**в lessons.db живут progress и reminder_settings — перезапись стирает прогресс**).
+- Генерация уроков остаётся на рабочей машине; сервер только выдаёт из готовой базы.
+
+### Изменённые файлы
+- `deploy/it-daily-bot.service`, `deploy/README.md`, `.ai/context.md`
+
+### Не доделано / риски
+- Сам деплой выполняет пользователь по инструкции (команды сервера за мной); статус — в context.md.
+- После деплоя локальный бот остановить: два long-polling с одним токеном выбивают друг друга ошибками Conflict.
+
+### Как проверить
+- `git log --oneline deploy/` → коммит с юнитом и README (проверено).
+- На сервере после шагов 1–5: `systemctl status it-daily-bot` → active (running), `journalctl -u it-daily-bot -f` — логи.
+
+---
+
 ## 2026-10-11 — Ежедневные напоминания (/remind, фоновый тик)
 
 **Агент:** Hermes (GLM)
