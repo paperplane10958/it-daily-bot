@@ -126,14 +126,34 @@ def test_init_stores_wires_runtime(tmp_path):
     from src.bot.__main__ import init_stores
     from src.agent.store import LessonStore
     from src.bot.progress import ProgressStore
+    from src.bot.reminders import ReminderStore
     from src.bot.handlers import runtime
 
     init_stores(tmp_path / "lessons.db")
     try:
         assert isinstance(runtime["lessons"], LessonStore)
         assert isinstance(runtime["progress"], ProgressStore)
+        assert isinstance(runtime["reminders"], ReminderStore)
     finally:
         runtime["lessons"].close()
         runtime["progress"].close()
+        runtime["reminders"].close()
         runtime["lessons"] = None
         runtime["progress"] = None
+        runtime["reminders"] = None
+
+
+def test_studied_today_uses_progress_dates(tmp_path):
+    """Изучавшие сегодня собираются из activity_dates всех пользователей."""
+    from src.bot.__main__ import studied_today_ids
+    from src.agent.store import LessonStore
+    from src.bot.progress import ProgressStore
+
+    db = tmp_path / "lessons.db"
+    LessonStore(db).close()
+    ps = ProgressStore(db)
+    ps.mark_completed(7, "l1", correct=4, total=4, xp=10)
+    ps.mark_completed(9, "l2", correct=4, total=4, xp=10)
+    ids = studied_today_ids(ps)
+    ps.close()
+    assert set(ids) == {7, 9}, "оба занимались сегодня"

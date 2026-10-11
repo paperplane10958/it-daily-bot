@@ -10,16 +10,52 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
 
+import datetime as dt
+
 from src.bot.handlers import router as message_router
 from src.bot.handlers import runtime
 from src.bot.progress import ProgressStore
+from src.bot.reminders import ReminderStore, run_reminder_tick
 from src.agent.store import LessonStore
 
 
 def init_stores(db_path) -> None:
-    """Открыть stores уроков/прогресса и отдать их хендлерам (runtime)."""
+    """Открыть stores уроков/прогресса/напоминаний и отдать их хендлерам (runtime)."""
     runtime["lessons"] = LessonStore(db_path)
     runtime["progress"] = ProgressStore(db_path)
+    runtime["reminders"] = ReminderStore(db_path)
+
+
+def studied_today_ids(progress: ProgressStore) -> set[int]:
+    """id всех, кто завершал урок сегодня (для фильтра напоминаний)."""
+    today = dt.date.today().isoformat()
+    rows = progress.conn.execute(
+        "SELECT DISTINCT user_id FROM progress WHERE substr(updated_at, 1, 10) = ?",
+        (today,),
+    ).fetchall()
+    return {r["user_id"] for r in rows}
+
+
+async def reminder_loop(bot, interval_seconds: int = 60) -> None:
+    """Раз в interval_seconds проверять, кому пора напомнить об уроке.
+
+    Тихо умирает при отмене (остановка бота); ошибки тика логируются, цикл живёт.
+    """
+    reminders = runtime["reminders"]
+    progress = runtime["progress"]
+    if reminders is None or progress is None:
+        return
+    while True:
+        try:
+            now = dt.datetime.now()
+            sent = await run_reminder_tick(bot, reminders, now, studied_today_ids(progress))
+            if sent:
+                logging.info("напоминания: отправлено %d", sent)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.exception("ошибка тика напоминаний")
+        await asyncio.sleep(interval_seconds)
 
 
 def build_dispatcher(token: str) -> Dispatcher:
@@ -64,8 +100,12 @@ def main() -> None:
     dp = build_dispatcher(token)
 
     async def run() -> None:
-        await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot)
+        reminder_task = asyncio.create_task(reminder_loop(bot))
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            await dp.start_polling(bot)
+        finally:
+            reminder_task.cancel()
 
     try:
         asyncio.run(run())

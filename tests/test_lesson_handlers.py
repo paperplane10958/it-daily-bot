@@ -16,10 +16,14 @@ from src.bot.handlers import (
     QUIZ_SELECT_ALL,
     QUIZ_SUBMIT,
     QUIZ_TOGGLE,
+    REMIND_OFF,
+    REMIND_HOUR,
+    REMIND_ON,
     answer_callback,
     cmd_cards,
     cmd_lesson,
     cmd_progress,
+    cmd_remind,
     render_progress,
 )
 
@@ -44,6 +48,21 @@ class FakeLessonStore:
 
     def all_published_count(self):
         return len(self.lessons)
+
+
+class FakeReminderStore:
+    def __init__(self):
+        self.settings: dict[int, dict] = {}
+
+    def set(self, user_id, hour):
+        self.settings[user_id] = {"hour": hour, "enabled": True}
+
+    def disable(self, user_id):
+        if user_id in self.settings:
+            self.settings[user_id]["enabled"] = False
+
+    def get(self, user_id):
+        return self.settings.get(user_id)
 
 
 class FakeProgressStore:
@@ -358,3 +377,70 @@ async def test_cards_next_after_last_says_done():
     cb = FakeCallback(f"{CARDS_SHOW}:0:next")
     await answer_callback(cb, lessons, progress)
     assert any("закончил" in t.lower() for _, t, _ in cb.message.sent)
+
+
+# --- /remind: ежедневные напоминания ------------------------------------------------
+
+
+def test_remind_kb_has_hour_buttons_and_off():
+    from src.bot.handlers import remind_kb
+
+    kb_off = remind_kb(enabled=False, hour=None)
+    labels_off = [b.text for row in kb_off.inline_keyboard for b in row]
+    assert any("Утро" in l for l in labels_off) and any("Вечер" in l for l in labels_off)
+    assert any("Включить снова" in l for l in labels_off), "в выключенном состоянии — кнопка включения"
+
+    kb_on = remind_kb(enabled=True, hour=19)
+    labels_on = [b.text for row in kb_on.inline_keyboard for b in row]
+    assert any("Выключить" in l for l in labels_on), "во включённом состоянии — кнопка выключения"
+
+
+@pytest.mark.asyncio
+async def test_remind_shows_current_setting():
+    lessons, progress = stores()
+    reminders = FakeReminderStore()
+    reminders.set(42, 19)
+    msg = FakeMessage()
+    await cmd_remind(msg, reminders)
+    text = msg.sent[-1][1]
+    assert "19" in text and "вкл" in text.lower()
+
+
+@pytest.mark.asyncio
+async def test_remind_unset_shows_hint():
+    lessons, progress = stores()
+    msg = FakeMessage()
+    await cmd_remind(msg, FakeReminderStore())
+    assert any("не" in t.lower() for _, t, _ in msg.sent)
+
+
+@pytest.mark.asyncio
+async def test_remind_hour_saves_setting():
+    lessons, progress = stores()
+    reminders = FakeReminderStore()
+    cb = FakeCallback(f"{REMIND_HOUR}:20")
+    await answer_callback(cb, lessons, progress, reminders)
+    assert reminders.get(42) == {"hour": 20, "enabled": True}
+    text = cb.message.sent[-1][1]
+    assert "20" in text, "подтверждение с выбранным часом"
+
+
+@pytest.mark.asyncio
+async def test_remind_off_disables():
+    lessons, progress = stores()
+    reminders = FakeReminderStore()
+    reminders.set(42, 9)
+    cb = FakeCallback(REMIND_OFF)
+    await answer_callback(cb, lessons, progress, reminders)
+    assert reminders.get(42) == {"hour": 9, "enabled": False}
+
+
+@pytest.mark.asyncio
+async def test_remind_on_reenables_previous_hour():
+    lessons, progress = stores()
+    reminders = FakeReminderStore()
+    reminders.set(42, 9)
+    reminders.disable(42)
+    cb = FakeCallback(REMIND_ON)
+    await answer_callback(cb, lessons, progress, reminders)
+    assert reminders.get(42) == {"hour": 9, "enabled": True}

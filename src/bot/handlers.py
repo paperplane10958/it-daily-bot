@@ -26,15 +26,18 @@ from src.lessons.xp import award_xp
 router = Router(name="messages")
 
 # Префиксы callback_data: q=toggle варианта, a=выбрать все, s=ответить,
-# c=карточки (show/next)
+# c=карточки (show/next), rh/roff/ron=напоминания (час/выкл/вкл)
 QUIZ_TOGGLE = "q"
 QUIZ_SELECT_ALL = "a"
 QUIZ_SUBMIT = "s"
 CARDS_SHOW = "c"
+REMIND_HOUR = "rh"
+REMIND_OFF = "roff"
+REMIND_ON = "ron"
 NOOP = "noop"
 
 # stores подставляет __main__.py при старте; в тестах хендлеры получают фейки напрямую
-runtime: dict = {"lessons": None, "progress": None}
+runtime: dict = {"lessons": None, "progress": None, "reminders": None}
 
 GREETING = (
     "Привет! Я IT Daily Bot 🤖🎓\n"
@@ -48,6 +51,7 @@ HELP = (
     "/lesson — следующий урок: теория секциями + квиз-кнопки, XP за прохождение\n"
     "/progress — пройдено уроков, XP, уровень и стрик 🔥\n"
     "/cards — карточки терминов из пройденных уроков\n"
+    "/remind — ежедневное напоминание об уроке (выбор времени)\n"
     "/start — приветствие"
 )
 
@@ -102,6 +106,11 @@ def parse_quiz_cb(data: str) -> dict | None:
         if op == CARDS_SHOW:
             # формат карточек: c:<idx>:<show|next>
             return {"op": op, "idx": int(p[1]), "action": p[2]}
+        if op == REMIND_HOUR:
+            # формат: rh:<час 0..23>
+            return {"op": op, "hour": int(p[1])}
+        if op in (REMIND_OFF, REMIND_ON):
+            return {"op": op}
         if op == QUIZ_TOGGLE:
             return {"op": op, "lid": p[1], "qidx": int(p[2]), "mask": int(p[3]), "optidx": int(p[4]), "ok": int(p[5])}
         if op in (QUIZ_SELECT_ALL, QUIZ_SUBMIT):
@@ -124,14 +133,17 @@ async def _edit_quiz(cb, lesson: dict, index: int, mask: int, ok: int, prefix: s
     )
 
 
-async def answer_callback(cb, lessons, progress) -> None:
-    """Обработчик кнопок квиза: toggle / выбрать все / ответить."""
+async def answer_callback(cb, lessons, progress, reminders=None) -> None:
+    """Обработчик кнопок: квиз, карточки, напоминания."""
     parsed = parse_quiz_cb(cb.data)
     if parsed is None:
         await cb.answer()
         return
     if parsed["op"] == CARDS_SHOW:
         await _handle_cards_cb(cb, parsed, progress)
+        return
+    if parsed["op"] in (REMIND_HOUR, REMIND_OFF, REMIND_ON):
+        await _handle_remind_cb(cb, parsed, reminders)
         return
     lesson = lessons.get_lesson(parsed["lid"])
     if lesson is None or parsed["qidx"] >= len(lesson.get("quiz", [])):
@@ -313,10 +325,11 @@ async def handle_progress(message: Message) -> None:
 @router.callback_query(F.data)
 async def handle_quiz_callback(cb) -> None:
     lessons, progress = runtime["lessons"], runtime["progress"]
+    reminders = runtime["reminders"]
     if lessons is None or progress is None:
         await cb.answer("Бот перезапускается — отправь /lesson заново", show_alert=True)
         return
-    await answer_callback(cb, lessons, progress)
+    await answer_callback(cb, lessons, progress, reminders)
 
 
 @router.message(CommandStart())
@@ -342,6 +355,85 @@ async def progress_command(message: Message) -> None:
 @router.message(Command("cards"))
 async def cards_command(message: Message) -> None:
     await handle_cards(message)
+
+
+# --- напоминания (/remind) ----------------------------------------------------------
+
+REMIND_HOURS = [(7, "Утро 7:00"), (12, "День 12:00"), (19, "Вечер 19:00"), (22, "Ночь 22:00")]
+
+
+def remind_kb(enabled: bool, hour: int | None) -> InlineKeyboardMarkup:
+    """Кнопки /remind: пресеты часов, вкл (предыдущий час) / выкл."""
+    rows = [[InlineKeyboardButton(text=label, callback_data=f"{REMIND_HOUR}:{h}") for h, label in REMIND_HOURS]]
+    if enabled and hour is not None:
+        rows.append([InlineKeyboardButton(text="Выключить", callback_data=REMIND_OFF)])
+    else:
+        rows.append([InlineKeyboardButton(text="Включить снова", callback_data=REMIND_ON)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def render_remind(setting: dict | None) -> str:
+    """Текст /remind: текущее состояние + как работает."""
+    if setting and setting["enabled"]:
+        status = f"Напоминание включено: каждый день в {setting['hour']}:00 ⏰"
+    elif setting:
+        status = "Напоминание выключено."
+    else:
+        status = "Напоминание пока не настроено."
+    return (
+        f"{status}\n\n"
+        "Пришлю сообщение в выбранный час, если в этот день ты ещё не прошёл урок. "
+        "Время местное (как на твоих часах).\n\n"
+        "Работает, пока бот запущен."
+    )
+
+
+async def cmd_remind(msg: Message, reminders) -> None:
+    setting = reminders.get(msg.chat.id)
+    await msg.answer(
+        render_remind(setting),
+        reply_markup=remind_kb(enabled=bool(setting and setting["enabled"]), hour=setting["hour"] if setting else None),
+    )
+
+
+async def handle_remind(message: Message) -> None:
+    reminders = runtime["reminders"]
+    if reminders is None:
+        await message.answer("База недоступна — загляни позже 👷")
+        return
+    await cmd_remind(message, reminders)
+
+
+async def _handle_remind_cb(cb, parsed: dict, reminders) -> None:
+    """Кнопки напоминаний: выбор часа, вкл/выкл."""
+    if reminders is None:
+        await cb.answer("База недоступна — загляни позже", show_alert=True)
+        return
+    user_id = cb.from_user.id
+    if parsed["op"] == REMIND_HOUR:
+        reminders.set(user_id, parsed["hour"])
+        text = f"Готово! Буду напоминать каждый день в {parsed['hour']}:00 ⏰"
+    elif parsed["op"] == REMIND_OFF:
+        reminders.disable(user_id)
+        text = "Напоминание выключено. Включить снова — /remind."
+    else:  # REMIND_ON: включить с прежним часом
+        setting = reminders.get(user_id)
+        if not setting:
+            await cb.answer("Сначала выбери время — /remind", show_alert=True)
+            return
+        reminders.set(user_id, setting["hour"])
+        text = f"Снова включено: каждый день в {setting['hour']}:00 ⏰"
+    setting = reminders.get(user_id)
+    await cb.message.edit_text(
+        text,
+        reply_markup=remind_kb(enabled=bool(setting and setting["enabled"]), hour=setting["hour"] if setting else None),
+    )
+    await cb.answer()
+
+
+@router.message(Command("remind"))
+async def remind_command(message: Message) -> None:
+    await handle_remind(message)
 
 
 @router.message()
