@@ -9,11 +9,15 @@ from pathlib import Path
 
 import pytest
 
+from datetime import date, timedelta
+
 from src.bot.handlers import (
+    CARDS_SHOW,
     QUIZ_SELECT_ALL,
     QUIZ_SUBMIT,
     QUIZ_TOGGLE,
     answer_callback,
+    cmd_cards,
     cmd_lesson,
     cmd_progress,
     render_progress,
@@ -45,9 +49,17 @@ class FakeLessonStore:
 class FakeProgressStore:
     def __init__(self):
         self.data: dict[tuple[int, str], dict] = {}
+        self.terms_data: list[tuple[str, str, str, str]] = []
+        self.dates_data: list = []
 
     def seen_lesson_ids(self, user_id):
         return [lid for (uid, lid) in self.data if uid == user_id]
+
+    def terms(self, user_id):
+        return self.terms_data
+
+    def activity_dates(self, user_id):
+        return self.dates_data
 
     def total_xp(self, user_id):
         return sum(r["xp"] for (uid, _), r in self.data.items() if uid == user_id)
@@ -271,5 +283,78 @@ async def test_progress_shows_stats():
 
 
 def test_render_progress_format():
-    text = render_progress(completed=3, xp=45, total_published=26)
-    assert "3" in text and "45" in text and "26" in text
+    text = render_progress(completed=3, xp=145, total_published=26, streak=2)
+    assert "3" in text and "145" in text and "26" in text
+    assert "уровень 2: 45/100" in text, "145 XP = уровень 2, 45 XP до следующего"
+    assert "Стрик: 2" in text
+
+
+@pytest.mark.asyncio
+async def test_progress_shows_streak_from_activity_dates():
+    lessons, progress = stores()
+    today = date.today()
+    progress.mark_completed(42, "l1", correct=4, total=4, xp=20)
+    progress.dates_data = [today, today - timedelta(days=1), today - timedelta(days=2)]
+    msg = FakeMessage()
+    await cmd_progress(msg, lessons, progress)
+    assert "Стрик: 3" in msg.sent[0][1]
+
+
+# --- /cards: карточки терминов ----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cards_without_terms_prompts_lesson():
+    lessons, progress = stores()
+    msg = FakeMessage()
+    await cmd_cards(msg, progress)
+    assert any("/lesson" in t for _, t, _ in msg.sent)
+
+
+@pytest.mark.asyncio
+async def test_cards_shows_first_term_without_definition():
+    lessons, progress = stores()
+    progress.terms_data = [("Сервер", "Мощный компьютер в дата-центре", "l1", "Тест")]
+    msg = FakeMessage()
+    await cmd_cards(msg, progress)
+    text = msg.sent[-1][1]
+    assert "Сервер" in text
+    assert "Мощный" not in text, "определение скрыто до нажатия кнопки"
+    labels = [b.text for row in msg.sent[-1][2]["reply_markup"].inline_keyboard for b in row]
+    assert any("Показать" in l for l in labels)
+
+
+@pytest.mark.asyncio
+async def test_cards_show_reveals_definition():
+    lessons, progress = stores()
+    progress.terms_data = [("Сервер", "Мощный компьютер в дата-центре", "l1", "Тест")]
+    cb = FakeCallback(f"{CARDS_SHOW}:0:show")
+    await answer_callback(cb, lessons, progress)
+    texts = [t for _, t, _ in cb.message.sent]
+    assert any("Мощный компьютер в дата-центре" in t for t in texts)
+    labels = [b.text for row in cb.message.sent[-1][2]["reply_markup"].inline_keyboard for b in row]
+    assert any("Дальше" in l for l in labels)
+
+
+@pytest.mark.asyncio
+async def test_cards_next_moves_to_next_term():
+    lessons, progress = stores()
+    progress.terms_data = [
+        ("Сервер", "Определение 1", "l1", "Т1"),
+        ("DNS", "Определение 2", "l2", "Т2"),
+    ]
+    cb = FakeCallback(f"{CARDS_SHOW}:0:next")
+    await answer_callback(cb, lessons, progress)
+    text = cb.message.sent[-1][1]
+    assert "DNS" in text
+    assert "Определение 2" not in text, "следующая карточка снова без определения"
+    assert "2/2" in text
+
+
+@pytest.mark.asyncio
+async def test_cards_next_after_last_says_done():
+    lessons, progress = stores()
+    progress.terms_data = [("Сервер", "Определение 1", "l1", "Т1")]
+    cb = FakeCallback(f"{CARDS_SHOW}:0:next")
+    await answer_callback(cb, lessons, progress)
+    assert any("закончил" in t.lower() for _, t, _ in cb.message.sent)

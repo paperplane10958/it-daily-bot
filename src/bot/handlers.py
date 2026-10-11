@@ -17,15 +17,20 @@ from aiogram.types import (
     Message,
 )
 
+import datetime as dt
+
+from src.lessons.gamify import level_for_xp, level_progress, streak_from_dates
 from src.lessons.render import lesson_messages, render_quiz_question, render_result
 from src.lessons.xp import award_xp
 
 router = Router(name="messages")
 
-# Префиксы callback_data: q=toggle варианта, a=выбрать все, s=ответить
+# Префиксы callback_data: q=toggle варианта, a=выбрать все, s=ответить,
+# c=карточки (show/next)
 QUIZ_TOGGLE = "q"
 QUIZ_SELECT_ALL = "a"
 QUIZ_SUBMIT = "s"
+CARDS_SHOW = "c"
 NOOP = "noop"
 
 # stores подставляет __main__.py при старте; в тестах хендлеры получают фейки напрямую
@@ -41,7 +46,8 @@ GREETING = (
 HELP = (
     "Команды:\n"
     "/lesson — следующий урок: теория секциями + квиз-кнопки, XP за прохождение\n"
-    "/progress — сколько уроков пройдено и сколько XP накоплено\n"
+    "/progress — пройдено уроков, XP, уровень и стрик 🔥\n"
+    "/cards — карточки терминов из пройденных уроков\n"
     "/start — приветствие"
 )
 
@@ -93,6 +99,9 @@ def parse_quiz_cb(data: str) -> dict | None:
     p = data.split(":")
     try:
         op = p[0]
+        if op == CARDS_SHOW:
+            # формат карточек: c:<idx>:<show|next>
+            return {"op": op, "idx": int(p[1]), "action": p[2]}
         if op == QUIZ_TOGGLE:
             return {"op": op, "lid": p[1], "qidx": int(p[2]), "mask": int(p[3]), "optidx": int(p[4]), "ok": int(p[5])}
         if op in (QUIZ_SELECT_ALL, QUIZ_SUBMIT):
@@ -120,6 +129,9 @@ async def answer_callback(cb, lessons, progress) -> None:
     parsed = parse_quiz_cb(cb.data)
     if parsed is None:
         await cb.answer()
+        return
+    if parsed["op"] == CARDS_SHOW:
+        await _handle_cards_cb(cb, parsed, progress)
         return
     lesson = lessons.get_lesson(parsed["lid"])
     if lesson is None or parsed["qidx"] >= len(lesson.get("quiz", [])):
@@ -169,9 +181,15 @@ async def answer_callback(cb, lessons, progress) -> None:
     await cb.answer()
 
 
-def render_progress(completed: int, xp: int, total_published: int) -> str:
-    """Текст /progress: пройдено уроков и XP."""
-    return f"📊 Твой прогресс:\nПройдено уроков: {completed} из {total_published}\nXP: {xp}"
+def render_progress(completed: int, xp: int, total_published: int, streak: int) -> str:
+    """Текст /progress: пройдено уроков, XP, уровень и стрик."""
+    level, in_level, to_next = level_progress(xp)
+    return (
+        f"📊 Твой прогресс:\n"
+        f"Пройдено уроков: {completed} из {total_published}\n"
+        f"XP: {xp} (уровень {level}: {in_level}/{to_next} до следующего)\n"
+        f"Стрик: {streak} 🔥"
+    )
 
 
 async def cmd_lesson(msg: Message, lessons, progress) -> None:
@@ -197,8 +215,83 @@ async def cmd_progress(msg: Message, lessons, progress) -> None:
             completed=progress.completed_count(msg.chat.id),
             xp=progress.total_xp(msg.chat.id),
             total_published=lessons.all_published_count(),
+            streak=streak_from_dates(progress.activity_dates(msg.chat.id), dt.date.today()),
         )
     )
+
+
+def cards_kb(index: int, total: int, revealed: bool) -> InlineKeyboardMarkup:
+    """Кнопки карточки: 'Показать определение' -> 'Дальше' (и навигация 1..N)."""
+    rows = []
+    if not revealed:
+        rows.append([InlineKeyboardButton(text="Показать определение", callback_data=f"{CARDS_SHOW}:{index}:show")])
+    else:
+        rows.append([InlineKeyboardButton(text=f"Дальше ({index + 2}/{total})", callback_data=f"{CARDS_SHOW}:{index}:next")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def render_card(terms: list[tuple[str, str, str, str]], index: int, revealed: bool) -> str:
+    """Карточка: термин (+ определение после 'Показать'), источник — урок."""
+    term, definition, _lid, lesson_title = terms[index]
+    lines = [f"🃏 Карточка {index + 1}/{len(terms)}", f"<b>{html.escape(term, quote=False)}</b>"]
+    if revealed:
+        lines.append(html.escape(definition, quote=False))
+    lines.append(f"<i>из урока «{html.escape(lesson_title, quote=False)}»</i>")
+    return "\n\n".join(lines)
+
+
+async def cmd_cards(msg: Message, progress) -> None:
+    """Карточки терминов из пройденных уроков (пока без SRS — простой просмотр)."""
+    terms = progress.terms(msg.chat.id)
+    if not terms:
+        await msg.answer("Пока нет карточек — пройди первый урок (/lesson), и термины появятся здесь 🃏")
+        return
+    await msg.answer(
+        render_card(terms, 0, revealed=False),
+        reply_markup=cards_kb(0, len(terms), revealed=False),
+        link_preview_options=NO_LINK_PREVIEW,
+    )
+
+
+async def handle_cards(message: Message) -> None:
+    progress = runtime["progress"]
+    if progress is None:
+        await message.answer("База недоступна — загляни позже 👷")
+        return
+    await cmd_cards(message, progress)
+
+
+async def _handle_cards_cb(cb, parsed: dict, progress) -> None:
+    """Кнопки карточек: показать определение / следующая карточка.
+
+    Термины перечитываются из базы по тому же ORDER BY, что при /cards, —
+    состояние только в callback_data (индекс).
+    """
+    terms = progress.terms(cb.from_user.id)
+    idx = parsed["idx"]
+    if not terms or idx >= len(terms):
+        await cb.answer("Карточки обновились — отправь /cards заново", show_alert=True)
+        return
+    if parsed["action"] == "show":
+        await cb.message.edit_text(
+            render_card(terms, idx, revealed=True),
+            reply_markup=cards_kb(idx, len(terms), revealed=True),
+            link_preview_options=NO_LINK_PREVIEW,
+        )
+        await cb.answer()
+        return
+    # next
+    nxt = idx + 1
+    if nxt >= len(terms):
+        await cb.message.edit_text("🃏 Карточки закончились! Возвращайся после нового урока (/lesson).")
+        await cb.answer()
+        return
+    await cb.message.edit_text(
+        render_card(terms, nxt, revealed=False),
+        reply_markup=cards_kb(nxt, len(terms), revealed=False),
+        link_preview_options=NO_LINK_PREVIEW,
+    )
+    await cb.answer()
 
 
 async def handle_lesson(message: Message) -> None:
@@ -244,6 +337,11 @@ async def lesson_command(message: Message) -> None:
 @router.message(Command("progress"))
 async def progress_command(message: Message) -> None:
     await handle_progress(message)
+
+
+@router.message(Command("cards"))
+async def cards_command(message: Message) -> None:
+    await handle_cards(message)
 
 
 @router.message()

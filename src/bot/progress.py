@@ -4,6 +4,8 @@
 актуален последний. Прогресс — не в документе урока (docs/lesson-schema.md).
 """
 
+import datetime as dt
+import json
 import sqlite3
 from pathlib import Path
 
@@ -73,3 +75,33 @@ class ProgressStore:
             (user_id, lesson_id),
         ).fetchone()
         return {"correct": row["correct"], "total": row["total"], "xp": row["xp"]} if row else None
+
+    def activity_dates(self, user_id: int) -> list:
+        """Дни (date), когда пользователь завершал уроки (по updated_at)."""
+        rows = self.conn.execute(
+            "SELECT DISTINCT substr(updated_at, 1, 10) AS day FROM progress WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+        return [dt.date.fromisoformat(r["day"]) for r in rows]
+
+    def terms(self, user_id: int) -> list[tuple[str, str, str, str]]:
+        """Термины (term, definition, lesson_id, lesson_title) из пройденных уроков.
+
+        JOIN с таблицей lessons той же базы: ключевые термины документа урока
+        -> карточки повторения.
+        """
+        rows = self.conn.execute(
+            """
+            SELECT p.lesson_id, l.json
+            FROM progress p JOIN lessons l ON l.id = p.lesson_id
+            WHERE p.user_id = ?
+            ORDER BY l.node_order, p.lesson_id
+            """,
+            (user_id,),
+        ).fetchall()
+        out: list[tuple[str, str, str, str]] = []
+        for row in rows:
+            lesson = json.loads(row["json"])
+            for t in lesson.get("key_terms", []):
+                out.append((t["term"], t["definition"], row["lesson_id"], lesson["title"]))
+        return out

@@ -55,3 +55,52 @@ def test_last_answer_details_are_stored(store):
     row = store.get_result(42, "l1")
     assert row == {"correct": 3, "total": 4, "xp": 10}
     assert store.get_result(42, "nope") is None
+
+
+# --- геймификация: даты активности и карточки -------------------------------------
+
+
+def test_activity_dates_from_updated_at(store):
+    from datetime import date
+
+    store.mark_completed(42, "l1", correct=4, total=4, xp=10)
+    dates = store.activity_dates(42)
+    assert dates == [date.today()], "updated_at пишется UTC; для стрика хватает даты"
+
+
+def test_terms_without_lessons_rows_is_empty(tmp_path):
+    """Пройденный урок, отсутствующий в таблице lessons, карточек не даёт."""
+    from src.agent.store import LessonStore
+
+    db = tmp_path / "lessons.db"
+    LessonStore(db).close()  # создаёт таблицу lessons (пустую)
+    ps = ProgressStore(db)
+    ps.mark_completed(42, "ghost-lesson", correct=4, total=4, xp=10)
+    assert ps.terms(42) == []
+    ps.close()
+
+
+def test_terms_joined_from_lessons_db(tmp_path):
+    """terms() объединяет key_terms завершённых уроков из таблицы lessons."""
+    import json
+    from pathlib import Path
+
+    from src.agent.store import LessonStore
+    from src.bot.progress import ProgressStore
+
+    docs = Path(__file__).resolve().parents[1] / "docs"
+    lesson = json.loads((docs / "examples" / "lesson-what-is-the-internet.json").read_text(encoding="utf-8"))
+    lesson["id"] = "r1-t1"
+    lesson["roadmap"]["order"] = 1
+    lesson["key_terms"] = [{"term": "Сервер", "definition": "Мощный компьютер"}]
+
+    lessons_db = tmp_path / "lessons.db"
+    ls = LessonStore(lessons_db)
+    ls.upsert_lesson(lesson)
+    ls.close()
+
+    ps = ProgressStore(lessons_db)
+    ps.mark_completed(42, "r1-t1", correct=1, total=1, xp=10)
+    terms = ps.terms(42)
+    ps.close()
+    assert terms == [("Сервер", "Мощный компьютер", "r1-t1", "Что такое интернет")]
