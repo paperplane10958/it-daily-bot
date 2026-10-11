@@ -7,14 +7,14 @@
 - [x] Решение по архитектуре контента: гибрид (roadmap.sh = скелет, ИИ-агент генерирует уроки пайплайном) — см. `.ai/decisions.md`
 - [x] LLM-провайдер: OpenRouter (OpenAI-совместимый API, ключ в `.env`)
 - [x] Схема урока v1: `docs/lesson.schema.json` + `docs/lesson-schema.md` + эталонный пример
-- [ ] Выбор стека (предложение: Python + aiogram 3)
-- [ ] Каркас бота (echo-бот)
-- [ ] Валидатор уроков (JSON Schema + семантика квиза)
+- [x] Выбор стека: Python 3.13 + aiogram 3.31 (TDD: pytest, pytest-asyncio; venv через uv)
+- [x] Валидатор уроков `validate_lesson` (JSON Schema + семантика квиза + лимиты рендера) — 11 тестов
+- [x] Каркас бота (echo-бот: /start, /help, эхо) — 7 тестов
 - [ ] Контент-агент: генерация уроков по темам roadmap.sh
 - [ ] Геймификация (стрики, XP)
 
 ## Следующий шаг
-Выбрать стек и собрать каркас бота (echo-бот), затем валидатор `validate_lesson` и контент-агент на OpenRouter.
+Сборка каркаса бота (echo) и валидатора `validate_lesson` — в процессе на ветке `feat/echo-bot`.
 
 ## Важные решения
 См. `.ai/decisions.md`
