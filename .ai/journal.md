@@ -1,5 +1,35 @@
 # Журнал работы агентов
 
+## 2026-10-11 — Контент-агент: roadmap → OpenRouter → SQLite
+
+**Агент:** Hermes (GLM)
+**Задача:** собрать пайплайн генерации уроков (branch feat/content-agent).
+
+### Сделано
+- Разведка roadmap.sh: структура нод в `https://roadmap.sh/<slug>.json` (topic/subtopic с label + position), контент тем — markdown в GitHub-репо `developer-roadmap/roadmaps/<id>/content/<slug>@<node_id>.md` (описание + ресурсы, короткие).
+- `src/agent/roadmap.py` (TDD, 8 тестов): fetch/parse/save; порядок тем — по y/x позиции ноды; fixture — урезанный реальный JSON backend-beginner.
+- `src/agent/openrouter.py`: минимальный клиент (stdlib, POST /chat/completions, json_object response_format), ошибки HTTP читаемые.
+- `src/agent/generator.py` (TDD, 11 тестов): промпт v1 (все поля схемы, квиз 4 вопроса, русский, rookie-уровень), парсинг ответа (с ```-фенсом и без), ретрай при невалидном ответе, простановка meta.
+- `src/agent/store.py` (TDD, 8 тестов): SQLite `data/lessons.db`, таблица lessons (денормализованные поля + json-тело), upsert с валидацией, next_published_lesson (по order, skip seen).
+- `src/agent/cli.py`: команды `topics` (скачать темы) и `generate` (N уроков за запуск, skip существующих, тянуть markdown ноды как опору). Smoke на фейковом клиенте — урок кладётся в базу, order=1.
+- Итого: 45 тестов зелёные.
+
+### Изменённые файлы
+- `src/agent/` (roadmap, openrouter, generator, store, cli), `tests/test_roadmap.py`, `tests/test_generator.py`, `tests/test_store.py`, `tests/fixtures/roadmap-backend-beginner.json`, `data/roadmaps/backend-beginner/topics.json`
+
+### Не доделано / риски
+- Реальная генерация не проверялась — нет OPENROUTER_API_KEY в .env. Запуск: вписать ключ, `.venv/bin/python -m src.agent.cli generate --roadmap backend-beginner --limit 3`.
+- id урока от LLM = slug темы, а не autonumber — при одинаковых label разных roadmap коллизия маловероятна (id включает roadmap_id).
+- Стрик/XP/выдача уроков в боте — следующий этап.
+
+### Как проверить
+- `.venv/bin/python -m pytest tests/ -q` → 45 passed.
+- `.venv/bin/python -m src.agent.cli topics --roadmap backend-beginner` → 26 тем.
+- С ключом OpenRouter: `.venv/bin/python -m src.agent.cli generate --roadmap backend-beginner --limit 3` → строки «✓ <тема>», уроки в `data/lessons.db`.
+- Нюанс статусов: промпт ставит `status: review`; у эталонного примера `published`. Бот в будущем берёт только published — перед выдачей решаем: автопубликация после валидации или ручная.
+
+---
+
 ## 2026-10-11 — Каркас бота + валидатор уроков (TDD)
 
 **Агент:** Hermes (GLM)
