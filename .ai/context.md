@@ -19,9 +19,11 @@
 - [x] parse_mode=HTML по умолчанию + безопасный рендер LLM-текста (markdown -> теги, escape)
 - [x] Геймификация: стрик, уровни (100 XP), карточки терминов /cards (без SRS)
 - [x] Ежедневные напоминания: /remind (кнопки 7/12/19/22), фоновый тик раз в минуту, анти-спам (1/день), пропускает занимавшихся сегодня
-- [x] Подготовлен деплой на VPS: deploy/it-daily-bot.service + deploy/README.md (журнал зафиксировал)
-- [ ] Пользователь проверяет бота вживую: /lesson, /progress, /cards, /remind в @it_daily_paperplane_bot
-- [ ] Деплой на VPS выполнен по deploy/README.md (сервер 1GB/1CPU, рядом AmneziaWG)
+- [x] Деплой на VPS выполнен: бот работает как systemd-сервис на сервере 1GB/1CPU (рядом AmneziaWG), BOT_PROXY на сервере не нужен (прямой доступ к api.telegram.org, curl 302)
+- [x] Пользователь проверил бота вживую на сервере: /lesson и остальные команды работают
+- [x] Фикс квиза: выбор multi-вопросов в серверном состоянии `quiz_state` — быстрые тапы больше не теряют выбор
+- [x] Фикс смержен в main (merge-коммит 52fa76d) и запушен; ветка `fix/quiz-multi-toggle` удалена локально и на GitHub
+- [ ] Обновить сервер: `git pull` + `sudo systemctl restart it-daily-bot`, затем проверить вживую двойным тапом в multi-квизе
 - [ ] SRS-повторения карточек (интервалы, приоритет забытых) — если /cards зайдёт
 
 ## Ключевые факты окружения
@@ -31,7 +33,7 @@
 - Ветки: `main` (бот+валидатор+CI), `feat/content-agent` (контент-агент, актуальная работа).
 
 ## Следующий шаг
-Деплой на VPS по `deploy/README.md`: merge feat/content-agent -> main и push (или уже сделан — см. журнал), clone на сервере, uv-venv, scp lessons.db и .env, проверка api.telegram.org с сервера, systemd. После деплоя локальный бот остановить (два long-polling с одним токеном конфликтуют). Затем: SRS-повторения карточек или новые roadmap.
+Обновить сервер: `cd ~/it-daily-bot && git pull && sudo systemctl restart it-daily-bot` (таблица quiz_state создастся сама) → проверить вживую двойным тапом в multi-квизе. Локальный бот не запускать (два long-polling конфликтуют). Обновления: генерация уроков локально -> scp базы на сервер (с бэкапом: в lessons.db живут progress, reminder_settings и quiz_state), код -> git pull на сервере. Кандидаты: SRS-повторения карточек, новые roadmap (linux, frontend), статистика/админка.
 
 ## Важные решения
 См. `.ai/decisions.md`
