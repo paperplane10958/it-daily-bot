@@ -38,6 +38,30 @@ def test_retake_overwrites_result_not_duplicates(store):
     assert store.total_xp(42) == 15, "повторное прохождение перезаписывает результат"
 
 
+def test_last_completed_lesson_id_is_most_recent(store):
+    store.mark_completed(42, "backend-beginner-git", correct=3, total=4, xp=10)
+    # второй урок завершён позже; сдвигаем первый средствами SQLite (updated_at в UTC)
+    store.conn.execute(
+        "UPDATE progress SET updated_at = datetime('now', '-1 day') WHERE lesson_id = 'backend-beginner-git'"
+    )
+    store.conn.commit()
+    store.mark_completed(42, "backend-beginner-javascript", correct=2, total=3, xp=5)
+    assert store.last_completed_lesson_id(42) == "backend-beginner-javascript"
+    assert store.last_completed_lesson_id(7) is None, "чужой пользователь — пусто"
+
+
+def test_quiz_state_roundtrip_per_user(store):
+    """Состояние квиза: нет -> записали -> перезаписали -> удалили."""
+    assert store.get_quiz_state(42, "l1") is None
+    store.set_quiz_state(42, "l1", qidx=0, mask=0b0101, ok=2)
+    assert store.get_quiz_state(42, "l1") == {"qidx": 0, "mask": 0b0101, "ok": 2}
+    store.set_quiz_state(42, "l1", qidx=1, mask=0b0010, ok=2)
+    assert store.get_quiz_state(42, "l1") == {"qidx": 1, "mask": 0b0010, "ok": 2}, "upsert по (user, lesson)"
+    assert store.get_quiz_state(7, "l1") is None, "состояние другого пользователя не видно"
+    store.delete_quiz_state(42, "l1")
+    assert store.get_quiz_state(42, "l1") is None
+
+
 def test_total_xp_sums_across_lessons(store):
     store.mark_completed(42, "l1", correct=4, total=4, xp=10)
     store.mark_completed(42, "l2", correct=2, total=4, xp=5)
