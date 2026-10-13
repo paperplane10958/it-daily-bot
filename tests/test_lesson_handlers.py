@@ -70,6 +70,20 @@ class FakeProgressStore:
         self.data: dict[tuple[int, str], dict] = {}
         self.terms_data: list[tuple[str, str, str, str]] = []
         self.dates_data: list = []
+        self.quiz_state: dict[tuple[int, str], dict] = {}
+
+    def get_quiz_state(self, user_id, lesson_id):
+        return self.quiz_state.get((user_id, lesson_id))
+
+    def set_quiz_state(self, user_id, lesson_id, qidx, mask, ok):
+        self.quiz_state[(user_id, lesson_id)] = {"qidx": qidx, "mask": mask, "ok": ok}
+
+    def delete_quiz_state(self, user_id, lesson_id):
+        self.quiz_state.pop((user_id, lesson_id), None)
+
+    def last_completed_lesson_id(self, user_id):
+        ids = [lid for (uid, lid) in self.data if uid == user_id]
+        return ids[-1] if ids else None
 
     def seen_lesson_ids(self, user_id):
         return [lid for (uid, lid) in self.data if uid == user_id]
@@ -110,9 +124,11 @@ class FakeCallback:
         self.data = data
         self.message = FakeMessage(chat_id)
         self.from_user = type("User", (), {"id": chat_id})()
+        self.alerts: list = []
 
-    async def answer(self):
-        pass
+    async def answer(self, text: str | None = None, show_alert: bool = False, **kwargs):
+        if text:
+            self.alerts.append((text, show_alert))
 
 
 def stores():
@@ -135,6 +151,22 @@ async def test_lesson_sends_messages_and_first_quiz_question():
 
 
 @pytest.mark.asyncio
+async def test_lesson_all_done_offers_replay_of_last_lesson():
+    """Все уроки пройдены -> /lesson выдаёт последний урок заново (повторное прохождение).
+
+    До фикса отвечало «поздравляем» и не сбрасывало застрявшее quiz_state —
+    но и повторить урок было нельзя, хотя mark_completed задуман как upsert.
+    """
+    lessons, progress = stores()
+    progress.mark_completed(42, EXAMPLE["id"], correct=4, total=5, xp=10)
+    msg = FakeMessage()
+    await cmd_lesson(msg, lessons, progress)
+    texts = [f for _, f, _ in msg.sent]
+    assert any(EXAMPLE["title"] in t for t in texts), "урок выдаётся заново"
+    assert not any("прошёл" in t.lower() for t in texts), "вместо «все пройдены» — сам урок"
+
+
+@pytest.mark.asyncio
 async def test_lesson_without_lessons_says_nothing_available():
     lessons, progress = FakeLessonStore([]), FakeProgressStore()
     msg = FakeMessage()
@@ -145,12 +177,17 @@ async def test_lesson_without_lessons_says_nothing_available():
 
 @pytest.mark.asyncio
 async def test_lesson_skips_seen_lessons():
+    """Пройденные уроки не выдаются повторно подряд: следом идёт следующий по порядку."""
     lessons, progress = stores()
-    progress.mark_completed(42, EXAMPLE["id"], correct=4, total=4, xp=20)
+    l2 = json.loads(json.dumps(EXAMPLE, ensure_ascii=False))
+    l2["id"] = "internet-second-topic"
+    l2["title"] = "Вторая тема"
+    store = FakeLessonStore([EXAMPLE, l2])
+    progress.mark_completed(42, EXAMPLE["id"], correct=4, total=5, xp=10)
     msg = FakeMessage()
-    await cmd_lesson(msg, lessons, progress)
+    await cmd_lesson(msg, store, progress)
     texts = [t for _, t, _ in msg.sent]
-    assert any("прошёл" in t.lower() for t in texts), "все уроки пройдены -> поздравляем"
+    assert any("Вторая тема" in t for t in texts), "следующий урок, а не пройденный"
 
 
 # --- квиз: выбор и отправка --------------------------------------------------------
@@ -162,8 +199,8 @@ async def test_toggle_marks_option_selected():
     lesson = json.loads(json.dumps(EXAMPLE, ensure_ascii=False))
     lesson["quiz"][0]["kind"] = "multi"  # toggle бывает только у multi
     store = FakeLessonStore([lesson])
-    # формат: q:<lid>:<qidx>:<mask>:<optidx>:<ok>
-    cb = FakeCallback(f"{QUIZ_TOGGLE}:{lesson['id']}:0:0:1:0")
+    # формат: q:<lid>:<qidx>:<optidx>; маска теперь в серверном состоянии
+    cb = FakeCallback(f"{QUIZ_TOGGLE}:{lesson['id']}:0:1")
     await answer_callback(cb, store, progress)
     kb = cb.message.sent[-1][2]["reply_markup"]
     labels = [btn.text for row in kb.inline_keyboard for btn in row]
@@ -177,7 +214,7 @@ async def test_multi_toggle_then_submit_button_appears():
     lesson["quiz"][0]["kind"] = "multi"
     store = FakeLessonStore([lesson])
     # после выбора одного варианта появляется кнопка «Ответить»
-    cb = FakeCallback(f"{QUIZ_TOGGLE}:{lesson['id']}:0:0:0:0")
+    cb = FakeCallback(f"{QUIZ_TOGGLE}:{lesson['id']}:0:0")
     await answer_callback(cb, store, progress)
     kb = cb.message.sent[-1][2]["reply_markup"]
     labels = [btn.text for row in kb.inline_keyboard for btn in row]
@@ -190,8 +227,9 @@ async def test_submit_scores_correct_answer():
     lesson_id = EXAMPLE["id"]
     q = EXAMPLE["quiz"][0]
     correct_idx = q["correct"][0]
-    # формат submit: s:<lid>:<qidx>:<mask>:<ok>; маска = бит выбранного варианта
-    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson_id}:0:{1 << correct_idx}:0")
+    # маска выбора теперь в серверном состоянии; формат submit: s:<lid>:<qidx>
+    progress.set_quiz_state(42, lesson_id, 0, 1 << correct_idx, ok=0)
+    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson_id}:0:0")
     await answer_callback(cb, lessons, progress)
     texts = [t for _, t, _ in cb.message.sent]
     assert any("Верно!" in t for t in texts), "должен похвалить и показать explanation"
@@ -204,7 +242,8 @@ async def test_submit_scores_wrong_answer():
     lesson_id = EXAMPLE["id"]
     q = EXAMPLE["quiz"][0]
     wrong_idx = next(i for i in range(len(q["options"])) if i not in q["correct"])
-    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson_id}:0:{1 << wrong_idx}:0")
+    # single: индекс варианта едет в callback_data (s:<lid>:<qidx>:<optidx>)
+    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson_id}:0:{wrong_idx}")
     await answer_callback(cb, lessons, progress)
     texts = [t for _, t, _ in cb.message.sent]
     assert any("Неверно" in t for t in texts)
@@ -215,14 +254,13 @@ async def test_submit_scores_wrong_answer():
 async def test_submit_last_question_records_progress_and_xp():
     lessons, progress = stores()
     lesson_id = EXAMPLE["id"]
-    ok_counter = [0]  # ok путешествует через колбэки: каждый верный ответ +1
     n = len(EXAMPLE["quiz"])
-    # отвечаем правильно на все вопросы: submit с полным набором
+    # отвечаем правильно на все вопросы: выбор держится в серверном состоянии
     for i in range(n):
         q = EXAMPLE["quiz"][i]
         mask = sum(1 << c for c in q["correct"])
-        cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson_id}:{i}:{mask}:{ok_counter[0]}")
-        ok_counter[0] += 1
+        progress.set_quiz_state(42, lesson_id, i, mask, ok=i)
+        cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson_id}:{i}:0")
         await answer_callback(cb, lessons, progress)
     result = progress.get_result(42, EXAMPLE["id"])
     assert result is not None, "прогресс должен записаться"
@@ -237,7 +275,7 @@ async def test_submit_last_question_records_progress_and_xp():
 async def test_after_submit_next_question_shown():
     lessons, progress = stores()
     lesson_id = EXAMPLE["id"]
-    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson_id}:0:{1 << 0}:0")
+    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson_id}:0:0")
     await answer_callback(cb, lessons, progress)
     texts = [t for _, t, _ in cb.message.sent]
     assert any("Квиз 2/5" in t for t in texts), "после ответа показывается следующий вопрос (в эталоне 5 вопросов)"
@@ -250,7 +288,8 @@ async def test_explanation_is_escaped():
     lesson = json.loads(json.dumps(EXAMPLE, ensure_ascii=False))
     lesson["quiz"][0]["explanation"] = "x < y и a&b"
     store = FakeLessonStore([lesson])
-    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson['id']}:0:{1 << 0}:0")
+    progress.set_quiz_state(42, lesson["id"], 0, 1 << 0, ok=0)
+    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson['id']}:0:0")
     await answer_callback(cb, store, progress)
     texts = [t for _, t, _ in cb.message.sent]
     assert any("x &lt; y и a&amp;b" in t for t in texts), "explanation должен экранироваться"
@@ -269,12 +308,90 @@ async def test_select_all_marks_all_selected_for_multi():
     lesson = json.loads(json.dumps(EXAMPLE, ensure_ascii=False))
     lesson["quiz"][0]["kind"] = "multi"
     store = FakeLessonStore([lesson])
-    # формат select_all: a:<lid>:<qidx>:<ok>
-    cb = FakeCallback(f"{QUIZ_SELECT_ALL}:{lesson['id']}:0:0")
+    # формат select_all: a:<lid>:<qidx> — выбор тоже в серверном состоянии
+    cb = FakeCallback(f"{QUIZ_SELECT_ALL}:{lesson['id']}:0")
     await answer_callback(cb, store, progress)
     kb = cb.message.sent[-1][2]["reply_markup"]
     labels = [btn.text for row in kb.inline_keyboard for btn in row]
     assert sum("✓" in l for l in labels) == len(lesson["quiz"][0]["options"])
+
+
+@pytest.mark.asyncio
+async def test_multi_double_tap_does_not_lose_first_choice():
+    """Регресс: два быстрых тапа по вариантам 0 и 1.
+
+    Оба тапа уходят от «старой» клавиатуры без выбора. Раньше маска выбора
+    жила в callback_data, второй тап перезаписывал первый, и submit шёл
+    с неполным набором. Теперь выбор копится на сервере.
+    """
+    lessons, progress = stores()
+    lesson = json.loads(json.dumps(EXAMPLE, ensure_ascii=False))
+    lesson["quiz"][0]["kind"] = "multi"
+    store = FakeLessonStore([lesson])
+    await answer_callback(FakeCallback(f"{QUIZ_TOGGLE}:{lesson['id']}:0:0"), store, progress)
+    await answer_callback(FakeCallback(f"{QUIZ_TOGGLE}:{lesson['id']}:0:1"), store, progress)
+    assert progress.get_quiz_state(42, lesson["id"])["mask"] == 0b0011, "оба тапа должны засчитаться"
+    # submit из callback_data без маски — серверная маска {0,1}; correct=[0,1,3] -> Неверно
+    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson['id']}:0:0")
+    await answer_callback(cb, store, progress)
+    texts = [t for _, t, _ in cb.message.sent]
+    assert any("Неверно" in t for t in texts), "частичный выбор не должен засчитаться как верный"
+
+
+@pytest.mark.asyncio
+async def test_multi_race_taps_then_full_choice_scores_correct():
+    """Гонка с двойным тапом: A, потом случайный B, потом B снят повторным тапом.
+
+    Все три тапа уходят от клавиатур без выбора. Раньше третий тап обнулял бы
+    маску (2^2=0) и терял вариант A; теперь тапы складываются в серверном
+    состоянии: итог {0} == correct -> «Верно».
+    """
+    lessons, progress = stores()
+    lesson = json.loads(json.dumps(EXAMPLE, ensure_ascii=False))
+    lesson["quiz"][0]["kind"] = "multi"
+    store = FakeLessonStore([lesson])
+    await answer_callback(FakeCallback(f"{QUIZ_TOGGLE}:{lesson['id']}:0:0"), store, progress)
+    await answer_callback(FakeCallback(f"{QUIZ_TOGGLE}:{lesson['id']}:0:1"), store, progress)
+    await answer_callback(FakeCallback(f"{QUIZ_TOGGLE}:{lesson['id']}:0:1"), store, progress)
+    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson['id']}:0:m")
+    await answer_callback(cb, store, progress)
+    texts = [t for _, t, _ in cb.message.sent]
+    assert any("Верно!" in t for t in texts), "итоговый выбор {0} должен засчитаться как верный"
+
+
+@pytest.mark.asyncio
+async def test_choice_state_resets_between_questions():
+    lessons, progress = stores()
+    lesson_id = EXAMPLE["id"]
+    progress.set_quiz_state(42, lesson_id, 0, 0b0001, ok=0)
+    cb = FakeCallback(f"{QUIZ_SUBMIT}:{lesson_id}:0:0")
+    await answer_callback(cb, lessons, progress)
+    assert progress.get_quiz_state(42, lesson_id) == {"qidx": 1, "mask": 0, "ok": 1}, "маска сбрасывается, счётчик едет к следующему вопросу"
+
+
+@pytest.mark.asyncio
+async def test_reissued_lesson_resets_stale_quiz_state():
+    """Брошенный посреди квиза урок при повторном /lesson начинается заново.
+
+    Без сброса застрявшее состояние (qidx=3) молча глотало бы тапы по
+    новому вопросу 0: guard «устаревший колбэк» считал бы их старой клавиатурой.
+    """
+    lessons, progress = stores()
+    msg = FakeMessage()
+    progress.set_quiz_state(42, EXAMPLE["id"], 3, 0b0010, ok=2)
+    await cmd_lesson(msg, lessons, progress)
+    assert progress.get_quiz_state(42, EXAMPLE["id"]) is None, "повторная выдача урока сбрасывает попытку"
+
+
+@pytest.mark.asyncio
+async def test_out_of_range_single_submit_ignored():
+    """Старый формат s:<lid>:<qidx>:<mask> после деплоя: маска-бит вне диапазона
+    вариантов (например 4 при 4 вариантах) не должна крэшить и грейдить вопрос."""
+    lessons, progress = stores()
+    cb = FakeCallback(f"{QUIZ_SUBMIT}:{EXAMPLE['id']}:0:4")
+    await answer_callback(cb, lessons, progress)  # не бросить, вопрос не грейдится
+    assert cb.message.sent == [], "submit с невалидным индексом не должен редактировать сообщение"
+    assert progress.get_result(42, EXAMPLE["id"]) is None
 
 
 # --- /progress -------------------------------------------------------------------

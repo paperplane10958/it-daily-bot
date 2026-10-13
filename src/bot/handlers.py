@@ -1,9 +1,11 @@
 """Обработчики бота: приветствие, /lesson с квизом-кнопками, /progress, эхо.
 
-Квиз без серверного состояния: выбор пользователя кодируется битовой маской
-в callback_data, счёт верных ответов путешествует вместе с кнопками. Бюджет
-callback_data — 64 байта: канонический id урока ограничен (~45 симв.), поля
-короткие. Если урок из callback не найден в базе — просим вызвать /lesson заново.
+Квиз: состояние прохождения (текущий вопрос, выбор multi-вопроса, счёт верных)
+хранится на сервере — таблица quiz_state в SQLite. Раньше выбор кодировался
+в callback_data — два быстрых тапа приходили от одной и той же старой клавиатуры,
+второй перезаписывал первый (вариант «отваливался», submit шёл с неполной маской).
+Бюджет callback_data — 64 байта: канонический id урока ограничен (~45 симв.),
+поля короткие. Если урок из callback не найден в базе — просим вызвать /lesson заново.
 """
 
 import html
@@ -68,11 +70,11 @@ ALL_DONE = (
 NO_LINK_PREVIEW = LinkPreviewOptions(is_disabled=True)
 
 
-def quiz_kb(lesson: dict, index: int, mask: int = 0, ok: int = 0) -> InlineKeyboardMarkup:
+def quiz_kb(lesson: dict, index: int, mask: int = 0) -> InlineKeyboardMarkup:
     """Кнопки вопроса квиза.
 
-    mask — битовая маска выбранных вариантов; ok — сколько ответов уже верно
-    (путешествует через колбэки до итогового результата).
+    mask — битовая маска выбранных вариантов (отметки ✓ и кнопка «Ответить»);
+    выбор и счёт живут в серверном состоянии (quiz_state), в callback_data не ездят.
     """
     lid = lesson["id"]
     q = lesson["quiz"][index]
@@ -81,24 +83,26 @@ def quiz_kb(lesson: dict, index: int, mask: int = 0, ok: int = 0) -> InlineKeybo
         mark = "✓ " if mask & (1 << j) else ""
         label = f"{mark}{chr(ord('A') + j)}) {opt}"
         if q["kind"] == "single":
-            # одиночный выбор: тап по варианту сразу отправляет ответ
-            cb = f"{QUIZ_SUBMIT}:{lid}:{index}:{1 << j}:{ok}"
+            # одиночный выбор: тап по варианту сразу отправляет ответ,
+            # индекс варианта едет в callback_data (маска не нужна)
+            cb = f"{QUIZ_SUBMIT}:{lid}:{index}:{j}"
         else:
-            cb = f"{QUIZ_TOGGLE}:{lid}:{index}:{mask}:{1 << j}:{ok}"
+            # multi: маска не в callback_data — живёт в серверном состоянии quiz_choice
+            cb = f"{QUIZ_TOGGLE}:{lid}:{index}:{j}"
         rows.append([InlineKeyboardButton(text=label[:64], callback_data=cb)])
     if q["kind"] == "multi":
         if mask != (1 << len(q["options"])) - 1:
-            rows.append([InlineKeyboardButton(text="Выбрать все", callback_data=f"{QUIZ_SELECT_ALL}:{lid}:{index}:{ok}")])
+            rows.append([InlineKeyboardButton(text="Выбрать все", callback_data=f"{QUIZ_SELECT_ALL}:{lid}:{index}")])
         if mask:
             rows.append(
-                [InlineKeyboardButton(text="Ответить", callback_data=f"{QUIZ_SUBMIT}:{lid}:{index}:{mask}:{ok}")]
+                [InlineKeyboardButton(text="Ответить", callback_data=f"{QUIZ_SUBMIT}:{lid}:{index}:m")]
             )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def parse_quiz_cb(data: str) -> dict | None:
     """Разобрать callback_data квиза. Форматы:
-    q:<lid>:<qidx>:<mask>:<optidx>:<ok> | a:<lid>:<qidx>:<ok> | s:<lid>:<qidx>:<mask>:<ok>
+    q:<lid>:<qidx>:<optidx> | a:<lid>:<qidx> | s:<lid>:<qidx>:<флаг>
     """
     p = data.split(":")
     try:
@@ -111,25 +115,28 @@ def parse_quiz_cb(data: str) -> dict | None:
             return {"op": op, "hour": int(p[1])}
         if op in (REMIND_OFF, REMIND_ON):
             return {"op": op}
-        if op == QUIZ_TOGGLE:
-            return {"op": op, "lid": p[1], "qidx": int(p[2]), "mask": int(p[3]), "optidx": int(p[4]), "ok": int(p[5])}
+        if op == QUIZ_TOGGLE:  # q:<lid>:<qidx>:<optidx>; 6 полей — формат до фикса
+            if len(p) != 4:
+                return {"op": op, "stale": True}
+            return {"op": op, "lid": p[1], "qidx": int(p[2]), "optidx": int(p[3])}
         if op in (QUIZ_SELECT_ALL, QUIZ_SUBMIT):
-            out = {"op": op, "lid": p[1], "qidx": int(p[2])}
-            if op == QUIZ_SELECT_ALL:
-                out["ok"] = int(p[3])
-            else:
-                out["mask"] = int(p[3])
-                out["ok"] = int(p[4])
-            return out
+            # a:<lid>:<qidx> (3) | s:<lid>:<qidx>[:<optidx>|"m"] (4); больше полей —
+            # формат до фикса (маска/ok в callback_data) -> просим перезапустить урок
+            if (op == QUIZ_SELECT_ALL and len(p) != 3) or (op == QUIZ_SUBMIT and len(p) not in (3, 4)):
+                return {"op": op, "stale": True}
+            optidx = None
+            if len(p) > 3 and p[3] != "m":
+                optidx = int(p[3])
+            return {"op": op, "lid": p[1], "qidx": int(p[2]), "optidx": optidx}
     except (IndexError, ValueError):
         return None
     return None
 
 
-async def _edit_quiz(cb, lesson: dict, index: int, mask: int, ok: int, prefix: str = "") -> None:
+async def _edit_quiz(cb, lesson: dict, index: int, mask: int, prefix: str = "") -> None:
     text = f"{prefix}{render_quiz_question(lesson, index)}"
     await cb.message.edit_text(
-        text, reply_markup=quiz_kb(lesson, index, mask, ok), link_preview_options=NO_LINK_PREVIEW
+        text, reply_markup=quiz_kb(lesson, index, mask), link_preview_options=NO_LINK_PREVIEW
     )
 
 
@@ -145,47 +152,77 @@ async def answer_callback(cb, lessons, progress, reminders=None) -> None:
     if parsed["op"] in (REMIND_HOUR, REMIND_OFF, REMIND_ON):
         await _handle_remind_cb(cb, parsed, reminders)
         return
+    if parsed.get("stale"):
+        # колбэк клавиатуры до фикса (маска в callback_data): lid/qidx не парсятся
+        # надёжно — не грейдим по нему, просим перезапустить урок
+        await cb.answer("Квиз обновился — отправь /lesson заново", show_alert=True)
+        return
     lesson = lessons.get_lesson(parsed["lid"])
     if lesson is None or parsed["qidx"] >= len(lesson.get("quiz", [])):
         await cb.answer("Урок обновился — отправь /lesson заново", show_alert=True)
         return
 
+    uid = cb.from_user.id
+    state = progress.get_quiz_state(uid, lesson["id"]) or {"qidx": parsed["qidx"], "mask": 0, "ok": 0}
+    # колбэк по устаревшей клавиатуре (вопрос уже отвечен) — тихо игнорируем:
+    # иначе двойной submit засчитал бы вопрос дважды
+    if state["qidx"] != parsed["qidx"]:
+        await cb.answer()
+        return
+
     if parsed["op"] == QUIZ_TOGGLE:
-        new_mask = parsed["mask"] ^ (1 << parsed["optidx"])
-        await _edit_quiz(cb, lesson, parsed["qidx"], new_mask, parsed["ok"])
+        optidx = parsed["optidx"]
+        if not 0 <= optidx < len(lesson["quiz"][parsed["qidx"]]["options"]):
+            await cb.answer()
+            return
+        new_mask = state["mask"] ^ (1 << optidx)
+        progress.set_quiz_state(uid, lesson["id"], parsed["qidx"], new_mask, state["ok"])
+        await _edit_quiz(cb, lesson, parsed["qidx"], new_mask)
         await cb.answer()
         return
 
     if parsed["op"] == QUIZ_SELECT_ALL:
         all_mask = (1 << len(lesson["quiz"][parsed["qidx"]]["options"])) - 1
-        await _edit_quiz(cb, lesson, parsed["qidx"], all_mask, parsed["ok"])
+        progress.set_quiz_state(uid, lesson["id"], parsed["qidx"], all_mask, state["ok"])
+        await _edit_quiz(cb, lesson, parsed["qidx"], all_mask)
         await cb.answer()
         return
 
-    # QUIZ_SUBMIT: маска = выбор пользователя, сверяем с correct
+    # QUIZ_SUBMIT: выбор пользователя — из серверного состояния (multi)
+    # или из колбэка (single: тап по варианту сразу отправляет ответ)
     q = lesson["quiz"][parsed["qidx"]]
-    chosen = {j for j in range(len(q["options"])) if parsed["mask"] & (1 << j)}
+    if q["kind"] == "single":
+        optidx = parsed["optidx"]
+        # index вне диапазона (мусур в callback_data) — не грейдим вопрос
+        if optidx is None or not 0 <= optidx < len(q["options"]):
+            await cb.answer("Ответ устарел — отправь /lesson заново", show_alert=True)
+            return
+        chosen = {optidx}
+    else:
+        chosen = {j for j in range(len(q["options"])) if state["mask"] & (1 << j)}
     is_correct = chosen == set(q["correct"])
-    ok_new = parsed["ok"] + (1 if is_correct else 0)
+    ok_new = state["ok"] + (1 if is_correct else 0)
     verdict = "✅ Верно!" if is_correct else "❌ Неверно."
     # explanation — текст от LLM: экранируем (parse_mode=HTML дефолтный)
     explanation = f"\n💬 {html.escape(q['explanation'], quote=False)}"
 
     nxt = parsed["qidx"] + 1
     if nxt < len(lesson["quiz"]):
+        # маска нового вопроса чистая, счёт едет дальше
+        progress.set_quiz_state(uid, lesson["id"], nxt, 0, ok_new)
         await cb.message.edit_text(
             f"{verdict}{explanation}\n\n{render_quiz_question(lesson, nxt)}",
-            reply_markup=quiz_kb(lesson, nxt, 0, ok_new),
+            reply_markup=quiz_kb(lesson, nxt),
             link_preview_options=NO_LINK_PREVIEW,
         )
         await cb.answer()
         return
 
     # последний вопрос: итог + запись прогресса
+    progress.delete_quiz_state(uid, lesson["id"])
     total = len(lesson["quiz"])
     xp = award_xp(ok_new, total, lesson["xp"])
-    user_id = cb.from_user.id
-    progress.mark_completed(user_id, lesson["id"], correct=ok_new, total=total, xp=xp)
+    progress.mark_completed(uid, lesson["id"], correct=ok_new, total=total, xp=xp)
     await cb.message.edit_text(
         f"{verdict}{explanation}\n\n{render_result(lesson, ok_new, total, xp)}",
         link_preview_options=NO_LINK_PREVIEW,
@@ -209,9 +246,18 @@ async def cmd_lesson(msg: Message, lessons, progress) -> None:
     seen = progress.seen_lesson_ids(msg.chat.id)
     lesson = lessons.next_published_lesson(seen)
     if lesson is None:
-        await msg.answer(ALL_DONE if lessons.all_published_count() else NO_LESSONS)
-        return
+        # всё пройдено: повторное прохождение задумано (mark_completed — upsert),
+        # выдаём последний завершённый урок заново; это же сбрасывает застрявший
+        # quiz_state брошенной попытки
+        last_id = progress.last_completed_lesson_id(msg.chat.id)
+        lesson = lessons.get_lesson(last_id) if last_id else None
+        if lesson is None:
+            await msg.answer(ALL_DONE if lessons.all_published_count() else NO_LESSONS)
+            return
 
+    # сбросить застрявшее состояние предыдущей попытки (урок бросили посреди квиза),
+    # иначе guard «устаревший колбэк» молча глотал бы тапы по новому вопросу
+    progress.delete_quiz_state(msg.chat.id, lesson["id"])
     for text in lesson_messages(lesson):
         await msg.answer(text, link_preview_options=NO_LINK_PREVIEW)
     await msg.answer(
