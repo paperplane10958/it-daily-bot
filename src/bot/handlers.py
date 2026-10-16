@@ -36,6 +36,8 @@ CARDS_SHOW = "c"
 REMIND_HOUR = "rh"
 REMIND_OFF = "roff"
 REMIND_ON = "ron"
+MENU_PREFIX = "m"
+MENU_CALLBACKS = ("m:lesson", "m:progress", "m:cards", "m:remind")
 NOOP = "noop"
 
 # stores подставляет __main__.py при старте; в тестах хендлеры получают фейки напрямую
@@ -50,11 +52,11 @@ GREETING = (
 
 HELP = (
     "Команды:\n"
+    "/start — главное меню (кнопки: урок, прогресс, карточки, напоминания)\n"
     "/lesson — следующий урок: теория секциями + квиз-кнопки, XP за прохождение\n"
     "/progress — пройдено уроков, XP, уровень и стрик 🔥\n"
     "/cards — карточки терминов из пройденных уроков\n"
-    "/remind — ежедневное напоминание об уроке (выбор времени)\n"
-    "/start — приветствие"
+    "/remind — ежедневное напоминание об уроке (выбор времени)"
 )
 
 NO_LESSONS = (
@@ -107,6 +109,9 @@ def parse_quiz_cb(data: str) -> dict | None:
     p = data.split(":")
     try:
         op = p[0]
+        if op == MENU_PREFIX:
+            # формат меню: m:<экран> (lesson/progress/cards/remind)
+            return {"op": op, "screen": p[1]}
         if op == CARDS_SHOW:
             # формат карточек: c:<idx>:<show|next>
             return {"op": op, "idx": int(p[1]), "action": p[2]}
@@ -133,6 +138,31 @@ def parse_quiz_cb(data: str) -> dict | None:
     return None
 
 
+async def _handle_menu_cb(cb, lessons, progress, reminders=None) -> None:
+    """Кнопки меню: каждое действие открывает экран НОВЫМ сообщением.
+
+    Меню — лаунчер: тап отправляет свежий экран (как команда /lesson), само
+    сообщение меню остаётся сверху якорем. Выбор не зависит от старой
+    клавиатуры: состояния нет, гонок быстрых тапов (как в multi-квизе) нет.
+    """
+    screen = cb.data.split(":")[1] if ":" in cb.data else ""
+    if screen == "remind" and reminders is None:
+        await cb.answer("База недоступна — загляни позже", show_alert=True)
+        return
+    actions = {
+        "lesson": lambda m: cmd_lesson(m, lessons, progress),
+        "progress": lambda m: cmd_progress(m, lessons, progress),
+        "cards": lambda m: cmd_cards(m, progress),
+        "remind": lambda m: cmd_remind(m, reminders),
+    }
+    action = actions.get(screen)
+    if action is None:
+        await cb.answer("Раздел недоступен — открой меню заново (/start)", show_alert=True)
+        return
+    await action(cb.message)
+    await cb.answer()
+
+
 async def _edit_quiz(cb, lesson: dict, index: int, mask: int, prefix: str = "") -> None:
     text = f"{prefix}{render_quiz_question(lesson, index)}"
     await cb.message.edit_text(
@@ -141,10 +171,13 @@ async def _edit_quiz(cb, lesson: dict, index: int, mask: int, prefix: str = "") 
 
 
 async def answer_callback(cb, lessons, progress, reminders=None) -> None:
-    """Обработчик кнопок: квиз, карточки, напоминания."""
+    """Обработчик кнопок: меню, квиз, карточки, напоминания."""
     parsed = parse_quiz_cb(cb.data)
     if parsed is None:
         await cb.answer()
+        return
+    if parsed["op"] == MENU_PREFIX:
+        await _handle_menu_cb(cb, lessons, progress, reminders)
         return
     if parsed["op"] == CARDS_SHOW:
         await _handle_cards_cb(cb, parsed, progress)
@@ -238,6 +271,44 @@ def render_progress(completed: int, xp: int, total_published: int, streak: int) 
         f"Пройдено уроков: {completed} из {total_published}\n"
         f"XP: {xp} (уровень {level}: {in_level}/{to_next} до следующего)\n"
         f"Стрик: {streak} 🔥"
+    )
+
+
+def render_menu(completed: int, xp: int, total_published: int, streak: int) -> str:
+    """Шапка меню /start: прогресс, XP и уровень, стрик."""
+    level, in_level, to_next = level_progress(xp)
+    return (
+        f"🏠 Главное меню\n"
+        f"Пройдено: {completed} из {total_published}\n"
+        f"⚡️ {xp} XP — уровень {level} ({in_level}/{to_next})\n"
+        f"Стрик: {streak} 🔥"
+    )
+
+
+def menu_kb() -> InlineKeyboardMarkup:
+    """Кнопки главного меню (префикс m: — не пересекается с квизом/карточками/напоминаниями)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📖 Урок дня", callback_data="m:lesson")],
+            [
+                InlineKeyboardButton(text="📊 Прогресс", callback_data="m:progress"),
+                InlineKeyboardButton(text="🃏 Карточки", callback_data="m:cards"),
+            ],
+            [InlineKeyboardButton(text="⏰ Напоминания", callback_data="m:remind")],
+        ]
+    )
+
+
+async def cmd_menu(msg: Message, lessons, progress) -> None:
+    """Главное меню: шапка со статистикой + кнопки-лаунчер."""
+    await msg.answer(
+        render_menu(
+            completed=progress.completed_count(msg.chat.id),
+            xp=progress.total_xp(msg.chat.id),
+            total_published=lessons.all_published_count(),
+            streak=streak_from_dates(progress.activity_dates(msg.chat.id), dt.date.today()),
+        ),
+        reply_markup=menu_kb(),
     )
 
 
@@ -368,6 +439,17 @@ async def handle_progress(message: Message) -> None:
     await cmd_progress(message, lessons, progress)
 
 
+@router.callback_query(F.data.startswith(f"{MENU_PREFIX}:"))
+async def handle_menu_callback(cb) -> None:
+    """Кнопки главного меню (m:*). Зарегистрирован до handle_quiz_callback."""
+    lessons, progress = runtime["lessons"], runtime["progress"]
+    reminders = runtime["reminders"]
+    if lessons is None or progress is None:
+        await cb.answer("Бот перезапускается — отправь /start заново", show_alert=True)
+        return
+    await _handle_menu_cb(cb, lessons, progress, reminders)
+
+
 @router.callback_query(F.data)
 async def handle_quiz_callback(cb) -> None:
     lessons, progress = runtime["lessons"], runtime["progress"]
@@ -380,7 +462,11 @@ async def handle_quiz_callback(cb) -> None:
 
 @router.message(CommandStart())
 async def handle_start(message: Message) -> None:
-    await message.answer(GREETING)
+    lessons, progress = runtime["lessons"], runtime["progress"]
+    if lessons is None or progress is None:
+        await message.answer(GREETING)
+        return
+    await cmd_menu(message, lessons, progress)
 
 
 @router.message(Command("help"))
