@@ -4,9 +4,9 @@
   topics   — скачать/обновить список тем roadmap (data/roadmaps/<id>/topics.json)
   generate — сгенерировать N уроков по темам, положить в SQLite (data/lessons.db)
 
-Примеры:
-  .venv/bin/python -m src.agent.cli topics --roadmap backend-beginner
-  .venv/bin/python -m src.agent.cli generate --roadmap backend-beginner --limit 3
+Примеры (из generator/, venv общий в корне репо):
+  ../.venv/bin/python -m src.agent.cli topics --roadmap backend-beginner
+  ../.venv/bin/python -m src.agent.cli generate --roadmap backend-beginner --limit 3
 """
 
 import argparse

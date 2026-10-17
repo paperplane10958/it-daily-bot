@@ -3,7 +3,8 @@
 #   sed "s/CHANGE_ME/$USER/" deploy/it-daily-bot.service | sudo tee /etc/systemd/system/it-daily-bot.service
 #   sudo systemctl daemon-reload && sudo systemctl enable --now it-daily-bot
 #
-# Assumes: код в ~/it-daily-bot, venv в ~/it-daily-bot/.venv, .env рядом с кодом.
+# Assumes: код в ~/it-daily-bot (с 2026-10 бот живёт в подкаталоге bot/),
+# venv в ~/it-daily-bot/.venv, .env в ~/it-daily-bot/.env (находится поиском вверх).
 
 [Unit]
 Description=IT Daily Bot (Telegram, aiogram long-polling)
@@ -14,7 +15,7 @@ Wants=network-online.target
 Type=simple
 User=CHANGE_ME
 Group=CHANGE_ME
-WorkingDirectory=%h/it-daily-bot
+WorkingDirectory=%h/it-daily-bot/bot
 ExecStart=%h/it-daily-bot/.venv/bin/python -m src.bot.__main__
 Restart=always
 RestartSec=5

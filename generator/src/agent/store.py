@@ -8,7 +8,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from src.lessons.validator import validate_lesson
+from src.agent.validator import validate_lesson
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS lessons (

@@ -27,7 +27,7 @@ from src.bot.handlers import (
     render_progress,
 )
 
-DOCS = Path(__file__).resolve().parents[1] / "docs"
+DOCS = Path(__file__).resolve().parents[2] / "generator" / "docs"
 EXAMPLE = json.loads(
     (DOCS / "examples" / "lesson-what-is-the-internet.json").read_text(encoding="utf-8")
 )

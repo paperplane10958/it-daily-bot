@@ -142,14 +142,25 @@ def test_dispatcher_includes_router():
 
 def test_init_stores_wires_runtime(tmp_path):
     from src.bot.__main__ import init_stores
-    from src.agent.store import LessonStore
+    from src.bot.reader import LessonReader
     from src.bot.progress import ProgressStore
     from src.bot.reminders import ReminderStore
     from src.bot.handlers import runtime
 
-    init_stores(tmp_path / "lessons.db")
+    db = tmp_path / "lessons.db"
+    # таблица lessons в минимальном виде, как её создаёт генератор (store.SCHEMA)
+    import sqlite3
+
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE lessons (id TEXT PRIMARY KEY, roadmap_id TEXT NOT NULL, "
+        "node TEXT NOT NULL, status TEXT NOT NULL, json TEXT NOT NULL)"
+    )
+    conn.commit()
+    conn.close()
+    init_stores(db)
     try:
-        assert isinstance(runtime["lessons"], LessonStore)
+        assert isinstance(runtime["lessons"], LessonReader)
         assert isinstance(runtime["progress"], ProgressStore)
         assert isinstance(runtime["reminders"], ReminderStore)
     finally:
@@ -208,12 +219,13 @@ def test_start_polling_registers_commands(monkeypatch):
 
 def test_studied_today_uses_progress_dates(tmp_path):
     """Изучавшие сегодня собираются из activity_dates всех пользователей."""
+    import sqlite3
+
     from src.bot.__main__ import studied_today_ids
-    from src.agent.store import LessonStore
     from src.bot.progress import ProgressStore
 
     db = tmp_path / "lessons.db"
-    LessonStore(db).close()
+    sqlite3.connect(db).close()  # файл базы есть (уроки — не нужны этому тесту)
     ps = ProgressStore(db)
     ps.mark_completed(7, "l1", correct=4, total=4, xp=10)
     ps.mark_completed(9, "l2", correct=4, total=4, xp=10)

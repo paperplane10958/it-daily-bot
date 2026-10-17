@@ -6,7 +6,7 @@ from pathlib import Path
 
 from src.lessons.render import lesson_messages, render_quiz_question, render_result
 
-DOCS = Path(__file__).resolve().parents[1] / "docs"
+DOCS = Path(__file__).resolve().parents[2] / "generator" / "docs"
 EXAMPLE = json.loads((DOCS / "examples" / "lesson-what-is-the-internet.json").read_text(encoding="utf-8"))
 
 

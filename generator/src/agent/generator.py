@@ -8,7 +8,7 @@ import datetime as dt
 import json
 import re
 
-from src.lessons.validator import validate_lesson
+from src.agent.validator import validate_lesson
 
 # В schema минимум 3 вопроса; промптом задаём 4 — с запасом на отбраковку
 QUIZ_MIN = 4
