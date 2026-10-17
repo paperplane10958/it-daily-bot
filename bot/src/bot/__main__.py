@@ -8,20 +8,21 @@ from urllib.parse import urlparse
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.types import BotCommand
 from dotenv import load_dotenv
 
 import datetime as dt
 
 from src.bot.handlers import router as message_router
 from src.bot.handlers import runtime
+from src.bot.reader import LessonReader
 from src.bot.progress import ProgressStore
 from src.bot.reminders import ReminderStore, run_reminder_tick
-from src.agent.store import LessonStore
 
 
 def init_stores(db_path) -> None:
     """Открыть stores уроков/прогресса/напоминаний и отдать их хендлерам (runtime)."""
-    runtime["lessons"] = LessonStore(db_path)
+    runtime["lessons"] = LessonReader(db_path)
     runtime["progress"] = ProgressStore(db_path)
     runtime["reminders"] = ReminderStore(db_path)
 
@@ -64,6 +65,20 @@ def build_dispatcher(token: str) -> Dispatcher:
     return dp
 
 
+BOT_COMMANDS = [
+    BotCommand(command="lesson", description="Пройти следующий урок"),
+    BotCommand(command="progress", description="Прогресс, XP и стрик"),
+    BotCommand(command="cards", description="Карточки терминов"),
+    BotCommand(command="remind", description="Ежедневное напоминание"),
+    BotCommand(command="help", description="Справка"),
+]
+
+
+async def set_bot_commands(bot) -> None:
+    """Зарегистрировать команды: синяя меню-кнопка Telegram (список у поля ввода)."""
+    await bot.set_my_commands(BOT_COMMANDS)
+
+
 def build_bot(token: str, proxy: str | None = None) -> Bot:
     """Бот с опциональным SOCKS/HTTP-прокси (BOT_PROXY в .env).
 
@@ -102,6 +117,7 @@ def main() -> None:
     async def run() -> None:
         reminder_task = asyncio.create_task(reminder_loop(bot))
         try:
+            await set_bot_commands(bot)
             await bot.delete_webhook(drop_pending_updates=True)
             await dp.start_polling(bot)
         finally:

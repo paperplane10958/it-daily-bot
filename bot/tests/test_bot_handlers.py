@@ -12,9 +12,11 @@ class FakeMessage:
         self.text = text
         self.chat = type("Chat", (), {"id": chat_id})()
         self.sent: list[str] = []
+        self.last_kwargs: dict = {}
 
     async def answer(self, text: str, **kwargs):
         self.sent.append(text)
+        self.last_kwargs = kwargs
 
 
 def _handler_names() -> list[str]:
@@ -59,11 +61,27 @@ async def test_start_replies_greeting():
 
 
 @pytest.mark.asyncio
+async def test_start_shows_menu_with_buttons(monkeypatch):
+    """Со stores на месте /start открывает меню со статистикой и кнопками."""
+    from src.bot import handlers
+    from tests.test_lesson_handlers import FakeLessonStore, FakeProgressStore
+
+    monkeypatch.setitem(handlers.runtime, "lessons", FakeLessonStore([]))
+    monkeypatch.setitem(handlers.runtime, "progress", FakeProgressStore())
+    msg = FakeMessage()
+    await handle_start(msg)
+    assert msg.sent, "/start должен отвечать"
+    assert "Главное меню" in msg.sent[0], "/start открывает меню, а не голое приветствие"
+    assert msg.last_kwargs.get("reply_markup") is not None, "меню приходит с кнопками"
+
+
+@pytest.mark.asyncio
 async def test_help_lists_commands():
     msg = FakeMessage()
     await handle_help(msg)
     assert msg.sent
     assert "/lesson" in msg.sent[0] and "/progress" in msg.sent[0]
+    assert "меню" in msg.sent[0].lower(), "help упоминает /start как меню"
 
 
 @pytest.mark.asyncio
@@ -124,14 +142,25 @@ def test_dispatcher_includes_router():
 
 def test_init_stores_wires_runtime(tmp_path):
     from src.bot.__main__ import init_stores
-    from src.agent.store import LessonStore
+    from src.bot.reader import LessonReader
     from src.bot.progress import ProgressStore
     from src.bot.reminders import ReminderStore
     from src.bot.handlers import runtime
 
-    init_stores(tmp_path / "lessons.db")
+    db = tmp_path / "lessons.db"
+    # таблица lessons в минимальном виде, как её создаёт генератор (store.SCHEMA)
+    import sqlite3
+
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE lessons (id TEXT PRIMARY KEY, roadmap_id TEXT NOT NULL, "
+        "node TEXT NOT NULL, status TEXT NOT NULL, json TEXT NOT NULL)"
+    )
+    conn.commit()
+    conn.close()
+    init_stores(db)
     try:
-        assert isinstance(runtime["lessons"], LessonStore)
+        assert isinstance(runtime["lessons"], LessonReader)
         assert isinstance(runtime["progress"], ProgressStore)
         assert isinstance(runtime["reminders"], ReminderStore)
     finally:
@@ -143,14 +172,60 @@ def test_init_stores_wires_runtime(tmp_path):
         runtime["reminders"] = None
 
 
+def test_start_polling_sets_bot_commands():
+    """При старте регистрируются команды бота: синяя меню-кнопка Telegram."""
+    from src.bot.__main__ import set_bot_commands
+
+    commands: list = []
+
+    class FakeBot:
+        async def set_my_commands(self, cmds):
+            commands.extend(cmds)
+
+    import asyncio
+
+    asyncio.run(set_bot_commands(FakeBot()))
+    scopes = [c.command for c in commands]
+    assert "lesson" in scopes and "progress" in scopes and "cards" in scopes
+    assert "remind" in scopes and "help" in scopes
+
+
+def test_start_polling_registers_commands(monkeypatch):
+    """start_polling вызывает set_my_commands перед циклом polling."""
+    from src.bot import __main__ as main_mod
+
+    calls: list = []
+
+    class FakeBot:
+        async def set_my_commands(self, cmds):
+            calls.append(cmds)
+
+        async def delete_webhook(self, drop_pending_updates=False):
+            pass
+
+    async def fake_start_polling(self, bot, **kwargs):
+        assert calls, "команды должны быть зарегистрированы до polling"
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(main_mod.Dispatcher, "start_polling", fake_start_polling)
+    monkeypatch.setattr(main_mod, "init_stores", lambda db: None)
+    monkeypatch.setattr(main_mod, "build_bot", lambda token, proxy=None: FakeBot())
+    monkeypatch.setattr(main_mod, "build_dispatcher", lambda token: main_mod.Dispatcher())
+    monkeypatch.delenv("BOT_TOKEN", raising=False)
+    monkeypatch.setenv("BOT_TOKEN", "123:test")
+    monkeypatch.delenv("BOT_PROXY", raising=False)
+    main_mod.main()  # KeyboardInterrupt проглатывается
+
+
 def test_studied_today_uses_progress_dates(tmp_path):
     """Изучавшие сегодня собираются из activity_dates всех пользователей."""
+    import sqlite3
+
     from src.bot.__main__ import studied_today_ids
-    from src.agent.store import LessonStore
     from src.bot.progress import ProgressStore
 
     db = tmp_path / "lessons.db"
-    LessonStore(db).close()
+    sqlite3.connect(db).close()  # файл базы есть (уроки — не нужны этому тесту)
     ps = ProgressStore(db)
     ps.mark_completed(7, "l1", correct=4, total=4, xp=10)
     ps.mark_completed(9, "l2", correct=4, total=4, xp=10)

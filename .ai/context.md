@@ -1,39 +1,43 @@
 # Контекст проекта (актуальное состояние)
 
-Обновлено: 2026-10-11
+Обновлено: 2026-10-17
+
+## Структура репо (с 2026-10-17 — два проекта в одном репо)
+- `bot/` — телеграм-бот: src/bot (handlers, __main__, reader, progress, reminders), src/lessons (render, gamify, xp), tests (118), deploy/ (systemd-юнит + README деплоя), data/lessons.db (уроки + прогресс)
+- `generator/` — контент-агент: src/agent (cli, generator, openrouter, roadmap, store, validator), docs/ (схема урока), tests (42), data/ (roadmaps + lessons.db генерации)
+- Контракт между проектами — таблица `lessons` в SQLite: бот читает её read-only (`bot/src/bot/reader.py`), код генератора боту не нужен
+- Общее: корневой `.env` (оба проекта находят через load_dotenv), venv в корне `.venv`, `.github/workflows/ci.yml` (матрица bot/generator), `.ai/`
 
 ## Статус
 - [x] Инициализация репозитория и workflow
 - [x] Решение по архитектуре контента: гибрид (roadmap.sh = скелет, ИИ-агент генерирует уроки пайплайном) — см. `.ai/decisions.md`
 - [x] LLM-провайдер: OpenRouter (OpenAI-совместимый API, ключ в `.env`)
-- [x] Схема урока v1: `docs/lesson.schema.json` + `docs/lesson-schema.md` + эталонный пример
+- [x] Схема урока v1: `generator/docs/lesson.schema.json` + дизайн + эталонный пример
 - [x] Выбор стека: Python 3.13 + aiogram 3.31 (TDD: pytest, pytest-asyncio; venv через uv)
-- [x] Валидатор уроков `validate_lesson` (JSON Schema + семантика квиза + лимиты рендера)
-- [x] Каркас бота (echo-бот: /start, /help, эхо) — **бот запущен пользователем, @it_daily_paperplane_bot работает**
-- [x] CI: GitHub Actions — pytest на push в main и PR
-- [x] Репозиторий на GitHub: paperplane10958/it-daily-bot (SSH)
-- [x] Контент-агент: roadmap.sh → темы (26 тем backend-beginner), генерация через OpenRouter, SQLite — **клиент OpenRouter переведён на httpx (urllib блокируется 403)**, автопубликация (status=published)
-- [x] Первая реальная генерация уроков: 2 урока в базе (`data/lessons.db`, published, модель haiku-5.5)
-- [x] Генерация всех 26 тем backend-beginner (0 брак, канонические id `<roadmap>-<slug>`, дедуп по ним же)
-- [x] Выдача уроков в боте: /lesson (контент + квиз-кнопки, XP), /progress, таблица progress в SQLite
-- [x] parse_mode=HTML по умолчанию + безопасный рендер LLM-текста (markdown -> теги, escape)
-- [x] Геймификация: стрик, уровни (100 XP), карточки терминов /cards (без SRS)
-- [x] Ежедневные напоминания: /remind (кнопки 7/12/19/22), фоновый тик раз в минуту, анти-спам (1/день), пропускает занимавшихся сегодня
-- [x] Деплой на VPS выполнен: бот работает как systemd-сервис на сервере 1GB/1CPU (рядом AmneziaWG), BOT_PROXY на сервере не нужен (прямой доступ к api.telegram.org, curl 302)
-- [x] Пользователь проверил бота вживую на сервере: /lesson и остальные команды работают
-- [x] Фикс квиза: выбор multi-вопросов в серверном состоянии `quiz_state` — быстрые тапы больше не теряют выбор
-- [x] Фикс смержен в main (merge-коммит 52fa76d) и запушен; ветка `fix/quiz-multi-toggle` удалена локально и на GitHub
-- [ ] Обновить сервер: `git pull` + `sudo systemctl restart it-daily-bot`, затем проверить вживую двойным тапом в multi-квизе
+- [x] Валидатор уроков `validate_lesson` (`generator/src/agent/validator.py`)
+- [x] Каркас бота, CI (GitHub Actions, матрица bot/generator), репо на GitHub (SSH)
+- [x] Контент-агент: 26 тем backend-beginner сгенерированы (haiku-5.5, ~$0.08 все), автопубликация, SQLite
+- [x] Выдача уроков в боте: /lesson (квиз-кнопки, XP), /progress, parse_mode=HTML + безопасный рендер
+- [x] Геймификация: стрик, уровни (100 XP), карточки /cards
+- [x] Ежедневные напоминания: /remind, фоновый тик, анти-спам
+- [x] Деплой на VPS: systemd-сервис it-daily-bot, бот работает вживую (проверено пользователем)
+- [x] Фикс квиза: multi-выбор в серверном состоянии quiz_state — смержен в main и на сервере
+- [x] Inline-меню: /start = шапка со статистикой + кнопки-лаунчер, setMyCommands — ветка `feat/menu` (154 теста на тот момент)
+- [x] Разделение репо на bot/ и generator/: бот читает базу read-only через LessonReader, базы разъехались, requirements/CI/README/deploy разделены — ветка `refactor/split-generator` (118 + 42 теста, коммит 4b3573c)
+- [ ] Смержить `feat/menu` + `refactor/split-generator` в main и обновить сервер по пошаговому гайду `bot/deploy/migration-2026-10.md` (юнит: WorkingDirectory=`~/it-daily-bot/bot`, база копируется внутри сервера в `bot/data/` — серверная главнее, там прогресс), проверить меню вживую
 - [ ] SRS-повторения карточек (интервалы, приоритет забытых) — если /cards зайдёт
 
 ## Ключевые факты окружения
-- Сеть блокирует api.telegram.org напрямую → `BOT_PROXY=socks5://localhost:1080` (прокси из `~/.ssh/config`, DynamicForward 1080) в `.env`.
+- Сеть блокирует api.telegram.org напрямую → `BOT_PROXY=socks5://localhost:1080` в `.env` (на сервере не нужен — прямой доступ).
 - OpenRouter блокирует python-urllib по TLS-отпечатку (403) → клиент на httpx (прокси берёт из env `ALL_PROXY`).
-- `.env`: BOT_TOKEN, OPENROUTER_API_KEY заданы; `LLM_MODEL=anthropic/claude-haiku-5.5` (~$0.003/урок, ~30 с). Тесты: 129 passed.
-- Ветки: `main` (бот+валидатор+CI), `feat/content-agent` (контент-агент, актуальная работа).
+- `.env` в корне: BOT_TOKEN, OPENROUTER_API_KEY, `LLM_MODEL=anthropic/claude-haiku-5.5` (~$0.003/урок).
+- Запуск: `cd bot && ../.venv/bin/python -m src.bot.__main__`; генерация: `cd generator && ../.venv/bin/python -m src.agent.cli generate --roadmap backend-beginner --limit N`. Один venv в корне: `uv pip install -r bot/requirements.txt -r generator/requirements.txt`.
+- Тесты: bot 118 + generator 42 (venv общий, pytest.ini в каждой директории).
+- Ветки: `main` (стабильная, на сервере), `feat/menu` (inline-меню), `refactor/split-generator` (разделение, на нём сейчас работаем).
+- Базы: `bot/data/lessons.db` — то, что живёт у бота (уроки + progress + quiz_state + reminder_settings); `generator/data/lessons.db` — рабочая база генерации. Корневая `data/lessons.db` — старая копия, можно удалить.
 
 ## Следующий шаг
-Обновить сервер: `cd ~/it-daily-bot && git pull && sudo systemctl restart it-daily-bot` (таблица quiz_state создастся сама) → проверить вживую двойным тапом в multi-квизе. Локальный бот не запускать (два long-polling конфликтуют). Обновления: генерация уроков локально -> scp базы на сервер (с бэкапом: в lessons.db живут progress, reminder_settings и quiz_state), код -> git pull на сервере. Кандидаты: SRS-повторения карточек, новые roadmap (linux, frontend), статистика/админка.
+Смержить `refactor/split-generator` (в неё входит feat/menu) в main, обновить сервер по обновлённому `bot/deploy/README.md`: юнит переложить (WorkingDirectory=`~/it-daily-bot/bot`), базу перезалить в `bot/data/lessons.db` (с бэкапом — там прогресс), deps по двум requirements. Проверить вживую: /start открывает меню с шапкой статистики и 4 кнопками, синяя меню-кнопка у поля ввода. Кандидаты: SRS-повторения карточек (или mini app, если зайдёт SRS), новые roadmap (linux, frontend), статистика/админка.
 
 ## Важные решения
 См. `.ai/decisions.md`

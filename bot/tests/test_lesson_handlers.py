@@ -27,7 +27,7 @@ from src.bot.handlers import (
     render_progress,
 )
 
-DOCS = Path(__file__).resolve().parents[1] / "docs"
+DOCS = Path(__file__).resolve().parents[2] / "generator" / "docs"
 EXAMPLE = json.loads(
     (DOCS / "examples" / "lesson-what-is-the-internet.json").read_text(encoding="utf-8")
 )
@@ -561,3 +561,48 @@ async def test_remind_on_reenables_previous_hour():
     cb = FakeCallback(REMIND_ON)
     await answer_callback(cb, lessons, progress, reminders)
     assert reminders.get(42) == {"hour": 9, "enabled": True}
+
+
+# --- /start: inline-меню ------------------------------------------------------------
+
+
+def test_menu_kb_has_main_buttons():
+    from src.bot.handlers import menu_kb
+
+    labels = [b.text for row in menu_kb().inline_keyboard for b in row]
+    assert any("Урок" in l for l in labels)
+    assert any("Прогресс" in l for l in labels)
+    assert any("Карточки" in l for l in labels)
+    assert any("Напоминания" in l for l in labels)
+
+
+def test_menu_kb_callback_data_prefixed():
+    """Все кнопки меню едут под префиксом m: — и не пересекаются с квизом/карточками."""
+    from src.bot.handlers import menu_kb
+
+    datas = [b.callback_data for row in menu_kb().inline_keyboard for b in row]
+    assert all(d.startswith("m:") for d in datas)
+    for expected in ("m:lesson", "m:progress", "m:cards", "m:remind"):
+        assert expected in datas
+
+
+def test_render_menu_shows_stats_and_level():
+    from src.bot.handlers import render_menu
+
+    text = render_menu(completed=3, xp=145, total_published=26, streak=2)
+    assert "3 из 26" in text
+    assert "145" in text and "уровень 2" in text, "XP и уровень в шапке"
+    assert "Стрик: 2" in text
+
+
+@pytest.mark.asyncio
+async def test_cmd_menu_sends_text_with_kb():
+    from src.bot.handlers import cmd_menu
+
+    lessons, progress = stores()
+    progress.mark_completed(42, "l1", correct=4, total=4, xp=20)
+    msg = FakeMessage()
+    await cmd_menu(msg, lessons, progress)
+    text, kwargs = msg.sent[-1][1], msg.sent[-1][2]
+    assert kwargs.get("reply_markup") is not None, "меню приходит с кнопками"
+    assert "Пройдено: 1 из 1" in text, "в шапке — реальная статистика"
