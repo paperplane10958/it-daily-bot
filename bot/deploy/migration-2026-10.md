@@ -49,8 +49,11 @@ cd ~/it-daily-bot/bot
 
 ```bash
 # 3.1 новый юнит: WorkingDirectory теперь ~/it-daily-bot/bot
+# (пути — от корня репо: после §2.6 ты в bot/, вернись командой cd ~/it-daily-bot)
+cd ~/it-daily-bot
 sed "s/CHANGE_ME/$USER/" bot/deploy/it-daily-bot.service | sudo tee /etc/systemd/system/it-daily-bot.service
 sudo systemctl daemon-reload
+grep -E "WorkingDirectory|ExecStart" /etc/systemd/system/it-daily-bot.service
 
 # 3.2 проверка руками перед сервисом (локальный бот на рабочей машине — выключить!)
 cd ~/it-daily-bot/bot
