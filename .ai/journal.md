@@ -1,5 +1,35 @@
 # Журнал работы агентов
 
+## 2026-10-17 — Разделение проекта: bot/ и generator/
+
+**Агент:** Hermes (GLM)
+**Задача:** вынести генерацию уроков в отдельную директорию («разделить проекты»).
+
+### Сделано
+- Форма (решение в `.ai/decisions.md`): две директории в этом же репо, ветка `refactor/split-generator` от `feat/menu`. Всё перенесено `git mv` — история файлов сохранена.
+- `generator/`: src/agent (cli, generator, openrouter, roadmap, store) + validator (переехал из src/lessons) + docs/ (схема урока) + data/roadmaps + 5 своих тестов + fixture. `bot/`: src/bot, src/lessons (render/gamify/xp), 8 тестов, deploy/, pytest.ini.
+- Бот больше не импортирует код генератора: новый `bot/src/bot/reader.py` — `LessonReader`, read-only (`mode=ro`): get/next_published/all_published_count. Нет файла базы или таблицы lessons → RuntimeError при старте (вместо тихих пустых выдач). Контракт между проектами = таблица `lessons` (её определение — `generator/src/agent/store.py`).
+- Базы разъехались: `bot/data/lessons.db` (уроки + прогресс/quiz_state/reminder_settings) и `generator/data/lessons.db` — копии бывшей корневой базы; корневая `data/lessons.db` осталась на диске как старая копия (никем не читается, можно удалить).
+- requirements разделены (бот: aiogram-стек; генератор: httpx/jsonschema/pytest); корневой requirements.txt удалён. Один venv в корне ставит оба набора: `uv pip install -r bot/requirements.txt -r generator/requirements.txt`.
+- CI: матрица bot/generator (uv, working-directory каждого проекта).
+- README ×3: корневой — карта репо + контракт, bot/ и generator/ — свои. `.env.example` уточнён, добавлен `generator/.env.example`. `.env` один в корне — найден обоими проектами (проверено).
+- Деплой: systemd-юнит — `WorkingDirectory=%h/it-daily-bot/bot` (`.env` ищется вверх), `deploy/README.md` — пути `bot/data/lessons.db`, deps обеих requirements, тесты из `~/it-daily-bot/bot`.
+- Тесты бота отвязаны от кода генератора (эталонный урок читается из `../generator/docs`; LessonStore в сетапах заменён голым sqlite3); новый тест-файл reader (TDD, 6 тестов).
+
+### Изменённые файлы
+- 51 файл: git mv-перестановка, новые `bot/src/bot/reader.py`, `bot/tests/test_lesson_reader.py`, `generator/README.md`, `bot/README.md`, `generator/pytest.ini`, `generator/requirements.txt`, `generator/.env.example`; правки `bot/src/bot/__main__.py`, тестов бота, `.github/workflows/ci.yml`, `.gitignore`, `README.md`, `bot/deploy/*`.
+
+### Не доделано / риски
+- Сервер на старой структуре: после мерджа обновлять по обновлённому `bot/deploy/README.md` — юнит переложить (WorkingDirectory=bot/), базу перезалить в `bot/data/`, deps по двум requirements.
+- CI по ветке глазами не проверен (gh нет, как раньше); локально оба набора зелёные.
+- Бот запускается теперь из `bot/` (`cd bot && ../.venv/bin/python -m src.bot.__main__`), генератор — из `generator/`.
+
+### Как проверить
+- `cd bot && ../.venv/bin/python -m pytest tests/ -q` → 118 passed; `cd generator && ../.venv/bin/python -m pytest tests/ -q` → 42 passed (проверено).
+- `git show --stat HEAD` → 51 файл, все переименования R (история сохранена).
+
+---
+
 ## 2026-10-16 — Inline-меню: /start как лаунчер + setMyCommands
 
 **Агент:** Hermes (GLM)
