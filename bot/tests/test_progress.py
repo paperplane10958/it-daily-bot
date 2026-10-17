@@ -94,10 +94,13 @@ def test_activity_dates_from_updated_at(store):
 
 def test_terms_without_lessons_rows_is_empty(tmp_path):
     """Пройденный урок, отсутствующий в таблице lessons, карточек не даёт."""
-    from src.agent.store import LessonStore
+    import sqlite3
 
     db = tmp_path / "lessons.db"
-    LessonStore(db).close()  # создаёт таблицу lessons (пустую)
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE lessons (id TEXT PRIMARY KEY, node_order INTEGER, json TEXT)")
+    conn.commit()
+    conn.close()
     ps = ProgressStore(db)
     ps.mark_completed(42, "ghost-lesson", correct=4, total=4, xp=10)
     assert ps.terms(42) == []
@@ -105,23 +108,35 @@ def test_terms_without_lessons_rows_is_empty(tmp_path):
 
 
 def test_terms_joined_from_lessons_db(tmp_path):
-    """terms() объединяет key_terms завершённых уроков из таблицы lessons."""
+    """terms() объединяет key_terms завершённых уроков из таблицы lessons.
+
+    Урок кладётся в базу как его хранит генератор (json-тело + node_order) —
+    без импорта кода генератора: таблица lessons = контракт между проектами.
+    """
     import json
+    import sqlite3
     from pathlib import Path
 
-    from src.agent.store import LessonStore
-    from src.bot.progress import ProgressStore
-
-    docs = Path(__file__).resolve().parents[1] / "docs"
+    docs = Path(__file__).resolve().parents[2] / "generator" / "docs"
     lesson = json.loads((docs / "examples" / "lesson-what-is-the-internet.json").read_text(encoding="utf-8"))
     lesson["id"] = "r1-t1"
-    lesson["roadmap"]["order"] = 1
     lesson["key_terms"] = [{"term": "Сервер", "definition": "Мощный компьютер"}]
 
     lessons_db = tmp_path / "lessons.db"
-    ls = LessonStore(lessons_db)
-    ls.upsert_lesson(lesson)
-    ls.close()
+    conn = sqlite3.connect(lessons_db)
+    conn.execute(
+        "CREATE TABLE lessons (id TEXT PRIMARY KEY, roadmap_id TEXT NOT NULL, "
+        "node TEXT NOT NULL, category TEXT, node_order INTEGER, status TEXT NOT NULL, "
+        "difficulty INTEGER, language TEXT, xp INTEGER, json TEXT NOT NULL, "
+        "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    conn.execute(
+        "INSERT INTO lessons (id, roadmap_id, node, status, node_order, json) "
+        "VALUES (?, 'demo', 'n', 'published', 1, ?)",
+        (lesson["id"], json.dumps(lesson, ensure_ascii=False)),
+    )
+    conn.commit()
+    conn.close()
 
     ps = ProgressStore(lessons_db)
     ps.mark_completed(42, "r1-t1", correct=1, total=1, xp=10)

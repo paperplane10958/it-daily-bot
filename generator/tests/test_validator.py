@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from src.lessons.validator import validate_lesson
+from src.agent.validator import validate_lesson
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 SCHEMA_PATH = DOCS / "lesson.schema.json"

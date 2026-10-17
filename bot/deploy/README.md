@@ -8,12 +8,12 @@
 | Что | Как |
 |---|---|
 | Код | `git clone` / `git pull` с GitHub (ветка `main`) |
-| Уроки | `data/lessons.db` через `scp` с рабочей машины (в .gitignore) |
+| Уроки | `bot/data/lessons.db` через `scp` с рабочей машины (в .gitignore) |
 | Секреты | `.env` через `scp` (токен бота, ключ OpenRouter) |
 | Зависимости | `uv` (без sudo-пакетов), venv внутри репо |
 | Сервис | `deploy/it-daily-bot.service` |
 
-Важно: в `data/lessons.db` лежит и прогресс пользователей (таблица `progress`),
+Важно: в `bot/data/lessons.db` лежит и прогресс пользователей (таблица `progress`),
 и настройки напоминаний. Перезапись базы на сервере затирает прогресс —
 сделать бэкап перед каждым обновлением (шаг 6).
 
@@ -44,14 +44,18 @@ export PATH="$HOME/.local/bin:$PATH"
 uv python install 3.13
 rm -rf .venv
 uv venv .venv --python 3.13
-uv pip install -r requirements.txt --python .venv/bin/python
+uv pip install -r bot/requirements.txt -r generator/requirements.txt --python .venv/bin/python
 ```
+
+С 2026-10 репо разделено на два проекта: бот живёт в `bot/` (оттуда и
+запускается), генерация уроков — `generator/` (на сервере не нужна, но
+зависимости ставятся одним venv).
 
 ## 3. База уроков и .env (с рабочей машины, не с сервера)
 
 ```bash
 # локально, в корне репо:
-scp data/lessons.db <server>:~/it-daily-bot/data/lessons.db
+scp bot/data/lessons.db <server>:~/it-daily-bot/bot/data/lessons.db
 scp .env <server>:~/it-daily-bot/.env
 ```
 
@@ -67,9 +71,9 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.telegram.org
 ## 4. Проверка вручную перед сервисом
 
 ```bash
-cd ~/it-daily-bot
-.venv/bin/python -m pytest tests/ -q     # 129 passed
-.venv/bin/python -m src.bot.__main__     # запустить в фоне/в tmux
+cd ~/it-daily-bot/bot
+../.venv/bin/python -m pytest tests/ -q     # бот: 118 passed
+../.venv/bin/python -m src.bot.__main__     # запустить в фоне/в tmux
 # в Telegram: /lesson, /progress, /remind
 # затем Ctrl+C
 ```
@@ -80,7 +84,7 @@ cd ~/it-daily-bot
 ## 5. systemd-сервис
 
 ```bash
-sed "s/CHANGE_ME/$USER/" deploy/it-daily-bot.service | sudo tee /etc/systemd/system/it-daily-bot.service
+sed "s/CHANGE_ME/$USER/" bot/deploy/it-daily-bot.service | sudo tee /etc/systemd/system/it-daily-bot.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now it-daily-bot
 journalctl -u it-daily-bot -f          # логи; выйти Ctrl+C, сервис продолжит
@@ -91,22 +95,22 @@ systemctl status it-daily-bot          # должно быть active (running)
 
 ```bash
 # на сервере:
-cd ~/it-daily-bot
 sudo systemctl stop it-daily-bot
-cp data/lessons.db data/lessons.db.bak   # прогресс пользователей
+cp bot/data/lessons.db bot/data/lessons.db.bak   # прогресс пользователей
 git pull
 # если менялись уроки: перезалить базу с рабочей машины
-#   (локально: scp data/lessons.db <server>:~/it-daily-bot/data/lessons.db)
+#   (локально: scp bot/data/lessons.db <server>:~/it-daily-bot/bot/data/lessons.db)
 # если менялись зависимости: export PATH="$HOME/.local/bin:$PATH"
-#   && uv pip install -r requirements.txt --python .venv/bin/python
+#   && uv pip install -r bot/requirements.txt -r generator/requirements.txt --python .venv/bin/python
 sudo systemctl start it-daily-bot
 ```
 
-Бэкапы копить не бездумно: `ls -lh data/*.bak` и удалять старые руками.
+Бэкапы копить не бездумно: `ls -lh bot/data/*.bak` и удалять старые руками.
 
 ## 7. Если что-то пошло не так
 
 - `systemctl status it-daily-bot` и `journalctl -u it-daily-bot -n 50` — первые зацепки.
-- «BOT_TOKEN не задан» — .env не на месте (должен быть `~/it-daily-bot/.env`).
+- «BOT_TOKEN не задан» — .env не на месте (должен быть `~/it-daily-bot/.env`, бот находит его поиском вверх от `bot/`).
+- «база уроков не найдена» — нет `~/it-daily-bot/bot/data/lessons.db` (шаг 3).
 - Сеть: `curl -s https://api.telegram.org` с сервера.
 - Свап (рекомендация, если ещё нет): `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile` + строка в `/etc/fstab`.

@@ -1,34 +1,43 @@
 # IT Daily Bot 🤖🎓
 
-Телеграм-бот в стиле Duolingo: каждый день учит меня IT по [roadmap.sh](https://roadmap.sh), начиная с базы.
+Телеграм-бот в стиле Duolingo: каждый день учит IT по [roadmap.sh](https://roadmap.sh).
+С 2026-10 репо разделено на два проекта:
 
-## Цель
-- Ежедневные короткие уроки (5–15 мин) с геймификацией: стрики, XP, уровни.
-- Контент на основе roadmap.sh (начинаем с Beginner roadmap: Internet, Linux, Git и т.д.).
+| Проект | Что делает |
+|---|---|
+| [`generator/`](generator/) | Контент-агент: темы roadmap.sh → генерация уроков через OpenRouter → SQLite |
+| [`bot/`](bot/) | Телеграм-бот: выдача уроков, квиз, XP/уровни/стрики, карточки, напоминания, деплой на VPS |
 
-## Стек
-- Python 3.13, aiogram 3.x, SQLite
-- Зависимости: uv (`uv pip install -r requirements.txt`)
+## Контракт между проектами
 
-## Запуск
-```bash
-cp .env.example .env   # вписать BOT_TOKEN от @BotFather
-uv venv .venv          # один раз
-uv pip install -r requirements.txt
-.venv/bin/python -m src.bot.__main__
-```
+Таблица `lessons` в SQLite: тело урока — колонка `json` (схема урока —
+`generator/docs/lesson.schema.json`), поля выборки денормализованы в колонки
+(определение таблицы — `generator/src/agent/store.py`). Бот читает базу
+read-only (`bot/src/bot/reader.py`), писать и валидировать уроки он не умеет.
+
+Поток уроков: генерация в `generator/data/lessons.db` → перенос в `bot/data/lessons.db`
+(на сервер — `scp`, см. `bot/deploy/README.md`). Прогресс пользователей живёт
+в базе бота (`bot/data/lessons.db`: таблицы `progress`, `quiz_state`,
+`reminder_settings`) — перезаливая базу, делай бэкап.
+
+## Окружение
+
+- Python 3.13, зависимости через uv. Один venv на репо в корне (`.venv`):
+  `uv venv .venv && uv pip install -r bot/requirements.txt -r generator/requirements.txt`
+- Секреты в корневом `.env` (`BOT_TOKEN`, `OPENROUTER_API_KEY`, `LLM_MODEL`,
+  `BOT_PROXY`) — оба проекта находят его через `load_dotenv()` (поиск вверх).
+  Образцы: `.env.example` (корень, для бота) и `generator/.env.example`.
+- `data/lessons.db` в корне не используется — базы у каждого проекта свои
+  (`bot/data/`, `generator/data/`).
 
 ## Тесты
+
 ```bash
-.venv/bin/python -m pytest tests/ -q
+cd bot       && ../.venv/bin/python -m pytest tests/ -q
+cd generator && ../.venv/bin/python -m pytest tests/ -q
 ```
 
-## Структура
-- `src/bot/` — бот (обработчики, точка входа)
-- `src/lessons/` — уроки: валидатор (`validate_lesson`)
-- `docs/lesson.schema.json` — схема урока v1, `docs/lesson-schema.md` — дизайн
-- `tests/` — pytest (валидатор, обработчики бота)
-
 ## Workflow
-- Git: `main` — стабильная ветка, фичи — через `feat/...` ветки.
+
+- Git: `main` — стабильная ветка, фичи — через `feat/...` ветки, conventional commits.
 - История работы ИИ-агентов: `.ai/journal.md` (правила см. в `AGENTS.md`).

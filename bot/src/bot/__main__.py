@@ -15,14 +15,14 @@ import datetime as dt
 
 from src.bot.handlers import router as message_router
 from src.bot.handlers import runtime
+from src.bot.reader import LessonReader
 from src.bot.progress import ProgressStore
 from src.bot.reminders import ReminderStore, run_reminder_tick
-from src.agent.store import LessonStore
 
 
 def init_stores(db_path) -> None:
     """Открыть stores уроков/прогресса/напоминаний и отдать их хендлерам (runtime)."""
-    runtime["lessons"] = LessonStore(db_path)
+    runtime["lessons"] = LessonReader(db_path)
     runtime["progress"] = ProgressStore(db_path)
     runtime["reminders"] = ReminderStore(db_path)
 

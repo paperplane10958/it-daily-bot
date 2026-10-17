@@ -42,11 +42,12 @@ def test_disable_unset_is_noop(store):
 
 
 def test_due_excludes_studied_today(tmp_path):
-    from src.agent.store import LessonStore
+    import sqlite3
+
     from src.bot.progress import ProgressStore
 
     db = tmp_path / "lessons.db"
-    LessonStore(db).close()  # создаёт таблицу lessons
+    sqlite3.connect(db).close()  # файл базы есть (уроки — не нужны этому тесту)
     rs = ReminderStore(db)
     ps = ProgressStore(db)
     rs.set(1, 9)
@@ -102,11 +103,12 @@ def run_reminder_tick_sync(bot, store, now):
 
 
 def test_tick_skips_wrong_hour_and_studied(tmp_path):
-    from src.agent.store import LessonStore
+    import sqlite3
+
     from src.bot.progress import ProgressStore
 
     db = tmp_path / "lessons.db"
-    LessonStore(db).close()
+    sqlite3.connect(db).close()  # файл базы есть (уроки — не нужны этому тесту)
     rs = ReminderStore(db)
     ps = ProgressStore(db)
     rs.set(1, 9)
