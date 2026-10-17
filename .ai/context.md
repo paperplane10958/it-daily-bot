@@ -24,7 +24,7 @@
 - [x] Фикс квиза: multi-выбор в серверном состоянии quiz_state — смержен в main и на сервере
 - [x] Inline-меню: /start = шапка со статистикой + кнопки-лаунчер, setMyCommands — ветка `feat/menu` (154 теста на тот момент)
 - [x] Разделение репо на bot/ и generator/: бот читает базу read-only через LessonReader, базы разъехались, requirements/CI/README/deploy разделены — ветка `refactor/split-generator` (118 + 42 теста, коммит 4b3573c)
-- [ ] Смержить `feat/menu` + `refactor/split-generator` в main и обновить сервер по `bot/deploy/README.md` (юнит: WorkingDirectory=`~/it-daily-bot/bot`, база перезалита в `bot/data/`, deps по двум requirements), проверить меню вживую
+- [ ] Смержить `feat/menu` + `refactor/split-generator` в main и обновить сервер по пошаговому гайду `bot/deploy/migration-2026-10.md` (юнит: WorkingDirectory=`~/it-daily-bot/bot`, база копируется внутри сервера в `bot/data/` — серверная главнее, там прогресс), проверить меню вживую
 - [ ] SRS-повторения карточек (интервалы, приоритет забытых) — если /cards зайдёт
 
 ## Ключевые факты окружения
