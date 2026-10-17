@@ -24,7 +24,10 @@
 - [x] Фикс квиза: multi-выбор в серверном состоянии quiz_state — смержен в main и на сервере
 - [x] Inline-меню: /start = шапка со статистикой + кнопки-лаунчер, setMyCommands — ветка `feat/menu` (154 теста на тот момент)
 - [x] Разделение репо на bot/ и generator/: бот читает базу read-only через LessonReader, базы разъехались, requirements/CI/README/deploy разделены — ветка `refactor/split-generator` (118 + 42 теста, коммит 4b3573c)
-- [ ] Смержить `feat/menu` + `refactor/split-generator` в main и обновить сервер по пошаговому гайду `bot/deploy/migration-2026-10.md` (юнит: WorkingDirectory=`~/it-daily-bot/bot`, база копируется внутри сервера в `bot/data/` — серверная главнее, там прогресс), проверить меню вживую
+- [x] Смержено в main и запушено (merge `07231de`: feat/menu + split-generator) — шаг 1 гайда миграции
+- [x] Гайд миграции сервера `bot/deploy/migration-2026-10.md` (+ фикс шага 3.1 `c93ef40`)
+- [x] Сервер: шаги 2.1–2.5 и 3.1 выполнены пользователем (бэкап базы, pull, база в bot/data/, юнит перезаписан — ловушка пути из bot/, обойдена)
+- [ ] **Сервер: докончить миграцию** — шаги 3.2 (ручная проверка из `~/it-daily-bot/bot`) → 4 (запуск сервиса + /start вживую); статус pytest 2.6 не подтверждён
 - [ ] SRS-повторения карточек (интервалы, приоритет забытых) — если /cards зайдёт
 
 ## Ключевые факты окружения
@@ -37,7 +40,7 @@
 - Базы: `bot/data/lessons.db` — то, что живёт у бота (уроки + progress + quiz_state + reminder_settings); `generator/data/lessons.db` — рабочая база генерации. Корневая `data/lessons.db` — старая копия, можно удалить.
 
 ## Следующий шаг
-Смержить `refactor/split-generator` (в неё входит feat/menu) в main, обновить сервер по обновлённому `bot/deploy/README.md`: юнит переложить (WorkingDirectory=`~/it-daily-bot/bot`), базу перезалить в `bot/data/lessons.db` (с бэкапом — там прогресс), deps по двум requirements. Проверить вживую: /start открывает меню с шапкой статистики и 4 кнопками, синяя меню-кнопка у поля ввода. Кандидаты: SRS-повторения карточек (или mini app, если зайдёт SRS), новые roadmap (linux, frontend), статистика/админка.
+Докончить миграцию сервера по `bot/deploy/migration-2026-10.md`: шаг 2.6 (pytest из `~/it-daily-bot/bot`, ожидание 118 passed) → 3.2 (ручной запуск, /start вживую, Ctrl+C) → 4 (systemctl start + статус + журнал). После стабильной недели удалить `data/lessons.db.migration.bak`. Кандидаты: SRS-повторения карточек (или mini app, если зайдёт SRS), новые roadmap (linux, frontend), статистика/админка.
 
 ## Важные решения
 См. `.ai/decisions.md`
